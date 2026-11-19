@@ -67,6 +67,7 @@ final class ArticleRecord {
     var canonicalURLString: String?
     var title: String
     var summary: String?
+    var fullText: String?
     var author: String?
     var publishedAt: Date?
     var firstSeenAt: Date
@@ -80,6 +81,7 @@ final class ArticleRecord {
         canonicalURLString: String? = nil,
         title: String,
         summary: String? = nil,
+        fullText: String? = nil,
         author: String? = nil,
         publishedAt: Date? = nil,
         firstSeenAt: Date = .now,
@@ -92,6 +94,7 @@ final class ArticleRecord {
         self.canonicalURLString = canonicalURLString
         self.title = title
         self.summary = summary
+        self.fullText = fullText
         self.author = author
         self.publishedAt = publishedAt
         self.firstSeenAt = firstSeenAt
@@ -107,6 +110,7 @@ final class ArticleRecord {
             canonicalURLString: domain.canonicalURL?.absoluteString,
             title: domain.title,
             summary: domain.summary,
+            fullText: domain.fullText,
             author: domain.author,
             publishedAt: domain.publishedAt,
             firstSeenAt: domain.firstSeenAt,
@@ -124,6 +128,7 @@ final class ArticleRecord {
             canonicalURL: canonicalURLString.flatMap(URL.init(string:)),
             title: title,
             summary: summary,
+            fullText: fullText,
             author: author,
             publishedAt: publishedAt,
             firstSeenAt: firstSeenAt,
