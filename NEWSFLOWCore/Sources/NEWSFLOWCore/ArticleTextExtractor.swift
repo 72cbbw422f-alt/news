@@ -70,7 +70,7 @@ public enum ArticleTextExtractor {
                   let digits = Range(match.range(at: 1), in: result) else { continue }
             let raw = String(result[digits])
             let scalarValue = raw.lowercased().hasPrefix("x")
-                ? UInt32(raw.dropFirst(), radix: 16)
+                ? UInt32(String(raw.dropFirst()), radix: 16)
                 : UInt32(raw)
             if let scalarValue, let scalar = UnicodeScalar(scalarValue) {
                 result.replaceSubrange(whole, with: String(scalar))
