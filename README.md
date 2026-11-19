@@ -16,7 +16,7 @@ NEWSFLOW is a Reeder-inspired iOS app focused on bringing RSS/news, saved readin
 - Clear separation between source adapters, domain logic, persistence and UI.
 
 ## Current status
-**Phase 1 — foundation and first iOS shell.** The core feed pipeline and test suite are implemented. A first SwiftUI app shell with local SwiftData models, timeline, source management, saved items and reader detail has been added. The iOS target has not yet been compiled or device-tested.
+**Phase 1 — foundation and first iOS shell.** The core feed pipeline, automated tests and initial SwiftUI app are implemented. The iOS target has successfully generated and compiled for the iOS Simulator in GitHub Actions.
 
 - [Project plan](docs/PROJECT_PLAN.md)
 - [Architecture](docs/ARCHITECTURE.md)
@@ -32,8 +32,16 @@ NEWSFLOW is a Reeder-inspired iOS app focused on bringing RSS/news, saved readin
 - OPML 2.0 import/export with nested folders.
 - 15 automated core tests passing in GitHub Actions on Swift 6.2.1.
 
-## iOS app shell
-The XcodeGen manifest is project.yml. On a Mac with Xcode installed:
+## iOS app
+- SwiftUI tab navigation and a unified article timeline.
+- Local SwiftData persistence for feeds and articles.
+- Add, refresh and remove RSS/Atom sources.
+- Article detail, saved articles and sharing.
+- Timeline search across article title, summary, author and source.
+- Timeline scopes for all, unread and saved articles.
+- XcodeGen project manifest and successful iOS Simulator build in CI.
+
+The XcodeGen manifest is `project.yml`. On a Mac with Xcode installed:
 
 ```sh
 brew install xcodegen
@@ -41,7 +49,7 @@ xcodegen generate
 open NEWSFLOW.xcodeproj
 ```
 
-Select the NEWSFLOW scheme and an iOS 17+ simulator to build. Device installation requires signing configured in Xcode. This repository does not currently contain a compiled IPA.
+Select the NEWSFLOW scheme and an iOS 17+ simulator to build. Device installation requires signing configured in Xcode. This repository does not currently contain a signed IPA.
 
 ## Core package tests
 Run on macOS or Linux with Swift 6.2.1 or a compatible Swift toolchain:
@@ -52,7 +60,7 @@ swift test
 ```
 
 ## Planned next
-- Search, filters, folders and OPML UI.
+- Feed folders and OPML import/export UI.
 - Background refresh and refresh scheduling.
 - Full article extraction and offline reading.
 - Podcast playback.
