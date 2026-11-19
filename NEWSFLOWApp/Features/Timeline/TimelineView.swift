@@ -3,11 +3,30 @@ import SwiftData
 
 struct TimelineView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \ArticleRecord.firstSeenAt, order: .reverse) private var articles: [ArticleRecord]
-    @Query(sort: \FeedSourceRecord.title) private var sources: [FeedSourceRecord]
+    @Query(sort: \\ArticleRecord.firstSeenAt, order: .reverse) private var articles: [ArticleRecord]
     @Environment(\.colorScheme) private var colorScheme
+    @State private var searchText = ""
+    @State private var scope: TimelineScope = .all
 
     private var unreadCount: Int { articles.filter { !$0.isRead }.count }
+
+    private var filteredArticles: [ArticleRecord] {
+        articles.filter { article in
+            let matchesScope: Bool
+            switch scope {
+            case .all: matchesScope = true
+            case .unread: matchesScope = !article.isRead
+            case .saved: matchesScope = article.isSaved
+            }
+            guard matchesScope else { return false }
+            let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !query.isEmpty else { return true }
+            return article.title.localizedCaseInsensitiveContains(query)
+                || (article.summary?.localizedCaseInsensitiveContains(query) ?? false)
+                || (article.author?.localizedCaseInsensitiveContains(query) ?? false)
+                || (article.source?.title.localizedCaseInsensitiveContains(query) ?? false)
+        }
+    }
 
     var body: some View {
         NavigationStack {
@@ -25,17 +44,32 @@ struct TimelineView: View {
                 } else {
                     List {
                         Section {
-                            ForEach(articles) { article in
-                                NavigationLink {
-                                    ArticleDetailView(article: article)
-                                } label: {
-                                    ArticleRow(article: article)
+                            Picker("Visa", selection: $scope) {
+                                ForEach(TimelineScope.allCases) { option in
+                                    Text(option.title).tag(option)
                                 }
-                                .listRowBackground(NEWSFLOWTheme.surface(colorScheme))
+                            }
+                            .pickerStyle(.segmented)
+                            .listRowBackground(Color.clear)
+                        }
+
+                        Section {
+                            if filteredArticles.isEmpty {
+                                ContentUnavailableView.search(text: searchText.isEmpty ? scope.emptySearchTerm : searchText)
+                                    .listRowBackground(Color.clear)
+                            } else {
+                                ForEach(filteredArticles) { article in
+                                    NavigationLink {
+                                        ArticleDetailView(article: article)
+                                    } label: {
+                                        ArticleRow(article: article)
+                                    }
+                                    .listRowBackground(NEWSFLOWTheme.surface(colorScheme))
+                                }
                             }
                         } header: {
                             HStack {
-                                Text("SENASTE")
+                                Text(scope.sectionTitle)
                                 Spacer()
                                 Text("\(unreadCount) olästa")
                                     .textCase(nil)
@@ -49,6 +83,7 @@ struct TimelineView: View {
             }
             .background(NEWSFLOWTheme.pageBackground(colorScheme))
             .navigationTitle("NEWSFLOW")
+            .searchable(text: $searchText, prompt: "Sök artiklar och källor")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
@@ -61,6 +96,38 @@ struct TimelineView: View {
                     .accessibilityLabel("Markera alla som lästa")
                 }
             }
+        }
+    }
+}
+
+private enum TimelineScope: String, CaseIterable, Identifiable {
+    case all
+    case unread
+    case saved
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: "Alla"
+        case .unread: "Olästa"
+        case .saved: "Sparade"
+        }
+    }
+
+    var sectionTitle: String {
+        switch self {
+        case .all: "SENASTE"
+        case .unread: "OLÄSTA"
+        case .saved: "SPARADE"
+        }
+    }
+
+    var emptySearchTerm: String {
+        switch self {
+        case .all: "artiklar"
+        case .unread: "olästa artiklar"
+        case .saved: "sparade artiklar"
         }
     }
 }
