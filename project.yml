@@ -21,7 +21,8 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: app.newsflow.ios
         PRODUCT_NAME: NEWSFLOW
         INFOPLIST_KEY_CFBundleDisplayName: NEWSFLOW
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
         GENERATE_INFOPLIST_FILE: YES
-        SWIFT_VERSION: "5.9"
+        SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
