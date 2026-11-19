@@ -16,7 +16,7 @@ NEWSFLOW is a Reeder-inspired iOS app focused on bringing RSS/news, saved readin
 - Clear separation between source adapters, domain logic, persistence and UI.
 
 ## Current status
-**Phase 1 — foundation in progress.** This branch establishes product requirements, architecture decisions, a reusable core package and parser tests. It is not yet a compiled iOS app or an IPA.
+**Phase 1 — foundation and first iOS shell.** The core feed pipeline and test suite are implemented. A first SwiftUI app shell with local SwiftData models, timeline, source management, saved items and reader detail has been added. The iOS target has not yet been compiled or device-tested.
 
 - [Project plan](docs/PROJECT_PLAN.md)
 - [Architecture](docs/ARCHITECTURE.md)
@@ -24,22 +24,37 @@ NEWSFLOW is a Reeder-inspired iOS app focused on bringing RSS/news, saved readin
 - [Quality gates](docs/QUALITY.md)
 - [Changelog](CHANGELOG.md)
 
-## Planned feature set
-1. Unified timeline and source subscriptions.
-2. RSS 2.0 and Atom ingestion, refresh, deduplication and unread state.
-3. Full article reader, reading list, bookmarks and history.
-4. Folders, tags, search and smart filters.
-5. Podcast feeds and playback.
-6. YouTube channel/video discovery using supported public interfaces.
-7. Bluesky and Reddit integrations, subject to API policies and rate limits.
-8. iOS widgets, share extension, notifications and optional iCloud sync.
+## Implemented core
+- RSS 2.0 and Atom parsing.
+- HTTP fetch with timeout, streamed byte limit, status and redirect checks.
+- Refresh normalization and duplicate counting.
+- Merge policy preserving read/saved state and local identity.
+- OPML 2.0 import/export with nested folders.
+- 15 automated core tests passing in GitHub Actions on Swift 6.2.1.
 
-## Development
-The reusable core is a Swift Package in `NEWSFLOWCore/`. Run its tests on macOS or Linux with a compatible Swift toolchain:
+## iOS app shell
+The XcodeGen manifest is project.yml. On a Mac with Xcode installed:
+
+```sh
+brew install xcodegen
+xcodegen generate
+open NEWSFLOW.xcodeproj
+```
+
+Select the NEWSFLOW scheme and an iOS 17+ simulator to build. Device installation requires signing configured in Xcode. This repository does not currently contain a compiled IPA.
+
+## Core package tests
+Run on macOS or Linux with Swift 6.2.1 or a compatible Swift toolchain:
 
 ```sh
 cd NEWSFLOWCore
 swift test
 ```
 
-The iOS application target and signing/build pipeline follow after core contracts and tests are stable. A source repository alone is not an IPA; building and signing the iOS app requires Xcode on macOS.
+## Planned next
+- Search, filters, folders and OPML UI.
+- Background refresh and refresh scheduling.
+- Full article extraction and offline reading.
+- Podcast playback.
+- YouTube, Bluesky and Reddit adapters using supported APIs.
+- Widgets, share extension and optional iCloud sync.
