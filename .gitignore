@@ -1,0 +1,15 @@
+.DS_Store
+.build/
+DerivedData/
+.swiftpm/
+*.xcuserstate
+xcuserdata/
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.mobileprovision
+*.p12
+Secrets.swift
+Secrets.plist
