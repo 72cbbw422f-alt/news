@@ -21,7 +21,7 @@ public enum ArticleTextExtractor {
             "(?is)<br\\s*/?>",
             "(?is)</(p|div|section|article|h[1-6]|li|blockquote|tr)\\s*>"
         ] {
-            cleaned = replacing(pattern: pattern, in: cleaned, with: "\\n")
+            cleaned = replacing(pattern: pattern, in: cleaned, with: "\n")
         }
 
         cleaned = replacing(pattern: "(?is)<[^>]+>", in: cleaned, with: " ")
@@ -31,7 +31,7 @@ public enum ArticleTextExtractor {
             .map { $0.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
 
-        let result = lines.joined(separator: "\\n\\n")
+        let result = lines.joined(separator: "\n\n")
         // Avoid treating menus, cookie notices or near-empty pages as article text.
         return result.count >= 240 ? result : nil
     }
