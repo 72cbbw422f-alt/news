@@ -3,7 +3,7 @@ import SwiftData
 
 struct TimelineView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query(sort: \\ArticleRecord.firstSeenAt, order: .reverse) private var articles: [ArticleRecord]
+    @Query(sort: \ArticleRecord.firstSeenAt, order: .reverse) private var articles: [ArticleRecord]
     @Environment(\.colorScheme) private var colorScheme
     @State private var searchText = ""
     @State private var scope: TimelineScope = .all
