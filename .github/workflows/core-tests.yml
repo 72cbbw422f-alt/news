@@ -1,0 +1,23 @@
+name: NEWSFLOW Core Tests
+
+on:
+  push:
+    branches: [main, "foundation/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test-core:
+    name: Swift package tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.0"
+      - name: Run NEWSFLOWCore tests
+        working-directory: NEWSFLOWCore
+        run: swift test
