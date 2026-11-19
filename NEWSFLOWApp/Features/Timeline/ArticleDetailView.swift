@@ -5,6 +5,8 @@ struct ArticleDetailView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
     @Bindable var article: ArticleRecord
+    @State private var isLoadingFullText = false
+    @State private var extractionMessage: String?
 
     var body: some View {
         ScrollView {
@@ -31,13 +33,45 @@ struct ArticleDetailView: View {
 
                 Divider()
 
-                if let summary = article.summary, !summary.isEmpty {
-                    Text(summary)
+                if let fullText = article.fullText, !fullText.isEmpty {
+                    Text(fullText)
                         .font(.system(.body, design: .serif))
-                        .lineSpacing(6)
+                        .lineSpacing(7)
                         .foregroundStyle(NEWSFLOWTheme.primaryText(colorScheme))
+                        .textSelection(.enabled)
+                    Label("Sparad för offlineläsning", systemImage: "checkmark.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(NEWSFLOWTheme.secondaryInk)
                 } else {
-                    ContentUnavailableView("Ingen artikeltext", systemImage: "doc.text", description: Text("Källan tillhandahåller ingen sammanfattning. Öppna originalartikeln för att läsa vidare."))
+                    if let summary = article.summary, !summary.isEmpty {
+                        Text(summary)
+                            .font(.system(.body, design: .serif))
+                            .lineSpacing(6)
+                            .foregroundStyle(NEWSFLOWTheme.primaryText(colorScheme))
+                    } else {
+                        ContentUnavailableView("Ingen artikeltext", systemImage: "doc.text", description: Text("Källan tillhandahåller ingen sammanfattning. Försök hämta artikeltext eller öppna originalkällan."))
+                    }
+
+                    Button {
+                        Task { await fetchFullText() }
+                    } label: {
+                        HStack {
+                            if isLoadingFullText { ProgressView().tint(.white) }
+                            else { Image(systemName: "text.page") }
+                            Text(isLoadingFullText ? "Hämtar artikeltext…" : "Hämta fullständig artikeltext")
+                        }
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(NEWSFLOWTheme.accent)
+                    .disabled(isLoadingFullText || article.canonicalURLString == nil)
+
+                    if let extractionMessage {
+                        Text(extractionMessage)
+                            .font(.caption)
+                            .foregroundStyle(NEWSFLOWTheme.secondaryInk)
+                    }
                 }
 
                 if let rawURL = article.canonicalURLString, let url = URL(string: rawURL) {
@@ -78,3 +112,31 @@ struct ArticleDetailView: View {
         }
     }
 }
+    
+    @MainActor
+    private func fetchFullText() async {
+        guard let rawURL = article.canonicalURLString,
+              let url = URL(string: rawURL),
+              FeedSource.validatedHTTPURL(url) else {
+            extractionMessage = "Artikeln saknar en giltig webbadress."
+            return
+        }
+
+        isLoadingFullText = true
+        extractionMessage = nil
+        defer { isLoadingFullText = false }
+
+        do {
+            let client = FeedHTTPClient(maximumResponseBytes: 3 * 1_024 * 1_024, timeout: 20)
+            let data = try await client.fetch(url)
+            guard let text = ArticleTextExtractor.extract(from: data) else {
+                extractionMessage = "NEWSFLOW hittade ingen tydlig artikeltext. Prova originalkällan."
+                return
+            }
+            article.fullText = text
+            try modelContext.save()
+        } catch {
+            extractionMessage = "Det gick inte att hämta artikeln just nu. Kontrollera anslutningen eller öppna originalkällan."
+        }
+    }
+
