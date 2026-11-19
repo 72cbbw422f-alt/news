@@ -6,7 +6,7 @@ import NEWSFLOWCore
 struct SettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.colorScheme) private var colorScheme
-    @Query(sort: \\FeedSourceRecord.title) private var sources: [FeedSourceRecord]
+    @Query(sort: \FeedSourceRecord.title) private var sources: [FeedSourceRecord]
     @State private var isImportingOPML = false
     @State private var isExportingOPML = false
     @State private var exportDocument = OPMLDocument(data: Data())
@@ -68,7 +68,7 @@ struct SettingsView: View {
                 defaultFilename: "NEWSFLOW-prenumerationer",
                 onCompletion: { result in
                     if case .failure(let error) = result {
-                        statusMessage = "Exporten misslyckades: \\(error.localizedDescription)"
+                        statusMessage = "Exporten misslyckades: \(error.localizedDescription)"
                     }
                 }
             )
@@ -132,9 +132,9 @@ struct SettingsView: View {
             try modelContext.save()
             statusMessage = addedCount == 0
                 ? "Inga nya källor att importera. Dubbletter hoppades över."
-                : "\\(addedCount) källor importerades. Uppdatera dem under fliken Källor för att hämta artiklar."
+                : "\(addedCount) källor importerades. Uppdatera dem under fliken Källor för att hämta artiklar."
         } catch {
-            statusMessage = "Importen misslyckades: \\(error.localizedDescription)"
+            statusMessage = "Importen misslyckades: \(error.localizedDescription)"
         }
     }
 }
