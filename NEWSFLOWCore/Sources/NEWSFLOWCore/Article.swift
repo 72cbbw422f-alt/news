@@ -7,6 +7,7 @@ public struct Article: Identifiable, Codable, Hashable, Sendable {
     public var canonicalURL: URL?
     public var title: String
     public var summary: String?
+    public var fullText: String?
     public var author: String?
     public var publishedAt: Date?
     public var firstSeenAt: Date
@@ -20,6 +21,7 @@ public struct Article: Identifiable, Codable, Hashable, Sendable {
         canonicalURL: URL? = nil,
         title: String,
         summary: String? = nil,
+        fullText: String? = nil,
         author: String? = nil,
         publishedAt: Date? = nil,
         firstSeenAt: Date = .now,
@@ -32,6 +34,7 @@ public struct Article: Identifiable, Codable, Hashable, Sendable {
         self.canonicalURL = canonicalURL
         self.title = title
         self.summary = summary
+        self.fullText = fullText
         self.author = author
         self.publishedAt = publishedAt
         self.firstSeenAt = firstSeenAt
