@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import NEWSFLOWCore
 
 struct ArticleDetailView: View {
     @Environment(\.modelContext) private var modelContext
@@ -111,7 +112,6 @@ struct ArticleDetailView: View {
             try? modelContext.save()
         }
     }
-}
     
     @MainActor
     private func fetchFullText() async {
@@ -139,4 +139,4 @@ struct ArticleDetailView: View {
             extractionMessage = "Det gick inte att hämta artikeln just nu. Kontrollera anslutningen eller öppna originalkällan."
         }
     }
-
+}
