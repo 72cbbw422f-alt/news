@@ -29,7 +29,7 @@ NEWSFLOW is a Reeder-inspired iOS app focused on bringing RSS/news, saved readin
 - HTTP fetch with timeout, streamed byte limit, status and redirect checks.
 - Refresh normalization and duplicate counting.
 - Merge policy preserving read/saved state and local identity.
-- OPML 2.0 import/export with nested folders.
+- OPML 2.0 import/export with nested folder paths.
 - 15 automated core tests passing in GitHub Actions on Swift 6.2.1.
 
 ## iOS app
@@ -39,6 +39,7 @@ NEWSFLOW is a Reeder-inspired iOS app focused on bringing RSS/news, saved readin
 - Article detail, saved articles and sharing.
 - Timeline search across article title, summary, author and source.
 - Timeline scopes for all, unread and saved articles.
+- OPML import/export from Settings, with duplicate URL detection and folder-path preservation.
 - XcodeGen project manifest and successful iOS Simulator build in CI.
 
 The XcodeGen manifest is `project.yml`. On a Mac with Xcode installed:
@@ -60,7 +61,7 @@ swift test
 ```
 
 ## Planned next
-- Feed folders and OPML import/export UI.
+- Feed-folder browsing and management.
 - Background refresh and refresh scheduling.
 - Full article extraction and offline reading.
 - Podcast playback.
