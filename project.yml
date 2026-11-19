@@ -1,0 +1,28 @@
+name: NEWSFLOW
+options:
+  bundleIdPrefix: app.newsflow
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+packages:
+  NEWSFLOWCore:
+    path: NEWSFLOWCore
+targets:
+  NEWSFLOW:
+    type: application
+    platform: iOS
+    sources:
+      - path: NEWSFLOWApp
+    dependencies:
+      - package: NEWSFLOWCore
+        product: NEWSFLOWCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.newsflow.ios
+        PRODUCT_NAME: NEWSFLOW
+        INFOPLIST_KEY_CFBundleDisplayName: NEWSFLOW
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
