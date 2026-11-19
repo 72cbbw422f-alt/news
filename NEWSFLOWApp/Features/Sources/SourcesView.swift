@@ -74,14 +74,10 @@ struct SourcesView: View {
                         .accessibilityLabel("Lägg till källa")
                 }
                 ToolbarItem(placement: .topBarLeading) {
-                    if !sources.isEmpty {
-                        EditButton()
-                    }
+                    if !sources.isEmpty { EditButton() }
                 }
             }
-            .sheet(isPresented: $showingAddFeed) {
-                AddFeedSheet()
-            }
+            .sheet(isPresented: $showingAddFeed) { AddFeedSheet() }
         }
     }
 
@@ -107,7 +103,6 @@ struct SourcesView: View {
                 } else {
                     let stored = ArticleRecord(domain: article, source: record)
                     modelContext.insert(stored)
-                    record.articles.append(stored)
                 }
             }
             if let title = result.sourceTitle, !title.isEmpty { record.title = title }
@@ -145,9 +140,7 @@ private struct AddFeedSheet: View {
                         .foregroundStyle(NEWSFLOWTheme.secondaryInk)
                 }
                 if let errorMessage {
-                    Section {
-                        Text(errorMessage).foregroundStyle(.red)
-                    }
+                    Section { Text(errorMessage).foregroundStyle(.red) }
                 }
             }
             .scrollContentBackground(.hidden)
@@ -195,9 +188,7 @@ private struct AddFeedSheet: View {
             record.lastSuccessAt = result.fetchedAt
             modelContext.insert(record)
             for article in result.articles {
-                let articleRecord = ArticleRecord(domain: article, source: record)
-                modelContext.insert(articleRecord)
-                record.articles.append(articleRecord)
+                modelContext.insert(ArticleRecord(domain: article, source: record))
             }
             try modelContext.save()
             dismiss()
