@@ -39,6 +39,61 @@ private final class RedirectingURLProtocol: URLProtocol {
 
     override func stopLoading() {}
 }
+
+
+private final class RedirectChainURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "chain.example.org"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let url = request.url else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            return
+        }
+
+        let nextPath: String
+        switch url.path {
+        case "/start":
+            nextPath = "/hop1"
+        case "/hop1":
+            nextPath = "/hop2"
+        default:
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 200,
+                httpVersion: "HTTP/1.1",
+                headerFields: nil
+            )!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data("feed".utf8))
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
+
+        guard let response = HTTPURLResponse(
+            url: url,
+            statusCode: 302,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Location": nextPath]
+        ), let destination = URL(string: nextPath, relativeTo: url)?.absoluteURL else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+
+        client?.urlProtocol(
+            self,
+            wasRedirectedTo: URLRequest(url: destination),
+            redirectResponse: response
+        )
+    }
+
+    override func stopLoading() {}
+}
 #endif
 
 final class FeedHTTPClientTests: XCTestCase {
@@ -120,6 +175,21 @@ final class FeedHTTPClientTests: XCTestCase {
             XCTAssertEqual(error, .unsafeRedirect)
         } catch {
             XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testActualRedirectChainStopsAtConfiguredMaximum() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RedirectChainURLProtocol.self]
+        let client = FeedHTTPClient(maximumRedirects: 1, sessionConfiguration: configuration)
+
+        do {
+            _ = try await client.fetch(URL(string: "https://chain.example.org/start")!)
+            XCTFail("Expected redirect limit error")
+        } catch let error as FeedHTTPError {
+            XCTAssertEqual(error, .tooManyRedirects)
+        } catch {
+            XCTFail("Unexpected error: \\(error)")
         }
     }
     #endif
