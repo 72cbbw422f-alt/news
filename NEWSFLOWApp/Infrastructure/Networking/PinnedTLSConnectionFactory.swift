@@ -1,6 +1,7 @@
 import Foundation
 import Network
 import Security
+import NEWSFLOWCore
 
 /// Explicit IP destination used by the feed transport TLS spike.
 ///
@@ -50,17 +51,7 @@ enum PinnedTLSConnectionFactory {
         address: PinnedIPAddress,
         port: UInt16
     ) throws -> NWConnection {
-        guard !serverName.isEmpty,
-              serverName.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
-              !serverName.contains("/"),
-              !serverName.contains("@"),
-              !serverName.contains(":"),
-              !serverName.contains("?"),
-              !serverName.contains("#"),
-              !serverName.contains("%"),
-              IPv4Address(serverName) == nil,
-              IPv6Address(serverName) == nil
-        else {
+        guard let validatedServerName = DNSHostname(serverName) else {
             throw ConfigurationError.invalidServerName
         }
 
@@ -69,7 +60,7 @@ enum PinnedTLSConnectionFactory {
         }
 
         let tlsOptions = NWProtocolTLS.Options()
-        serverName.withCString {
+        validatedServerName.value.withCString {
             sec_protocol_options_set_tls_server_name(
                 tlsOptions.securityProtocolOptions,
                 $0
