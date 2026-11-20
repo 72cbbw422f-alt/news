@@ -23,6 +23,7 @@
 - [ ] Local hostnames, embedded credentials, unsupported schemes and non-standard ports rejected.
 - [ ] Redirect destinations pass the same URL safety validation.
 - [ ] An HTTP-level redirect to a loopback/private destination is rejected before the redirected request is issued.
+- [ ] HTTP redirect chains stop at the configured maximum redirect count.
 - [ ] DNS resolution/address pinning limitations explicitly tracked.
 
 ## Release candidate
