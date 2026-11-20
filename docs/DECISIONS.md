@@ -43,4 +43,10 @@ Required design properties:
 - Keep the transport behind a small injectable protocol so NEWSFLOWCore tests can use deterministic resolver and connection fakes. The app/platform adapter may use Network.framework or another transport that can demonstrably satisfy the TLS and address-pinning requirements.
 - Do not silently fall back to ordinary URLSession for a hostname when pinning is unavailable. Fail closed.
 
+### Implementation spike findings (2026-11-20)
+
+Apple documents that Network.framework can create an NWConnection to an explicit host/port endpoint and that sec_protocol_options_set_tls_server_name overrides the endpoint-derived name used for TLS SNI and peer-certificate hostname verification. This makes an IP endpoint plus the original DNS hostname a viable prototype direction; it is not yet proof of a complete secure HTTP transport.
+
+The prototype must still demonstrate the actual remote peer endpoint, normal system trust evaluation with hostname validation, DNS answer-set validation, HTTP framing and bounded streaming, redirect re-resolution, timeout and cancellation. See docs/FEED_TRANSPORT_SPIKE.md for the acceptance plan and unresolved risks.
+
 The implementation spike must prove, with integration tests, the actual peer address used by the connection, hostname-based TLS validation, mixed public/private DNS answers, IPv4 and IPv6 handling, redirect re-resolution, cancellation and bounded streaming. Until those tests pass, keep the current DNS limitation explicit and do not claim complete SSRF protection.
