@@ -31,7 +31,14 @@ public enum FeedURLSafety {
         }
 
         // Reject numeric-only and legacy integer/octal/hex IPv4 representations.
-        guard host.rangeOfCharacter(from: CharacterSet.letters) != nil else { return false }
+        // URL parsers may interpret a 0x-prefixed host as an IPv4 address even
+        // though it is not a conventional dotted-decimal literal.
+        guard !host.split(separator: ".", omittingEmptySubsequences: false)
+            .contains(where: { $0.hasPrefix("0x") }),
+              host.rangeOfCharacter(from: CharacterSet.letters) != nil
+        else {
+            return false
+        }
 
         let blockedNames = [
             "localhost", "local", "internal", "home", "lan", "test", "invalid", "example"
