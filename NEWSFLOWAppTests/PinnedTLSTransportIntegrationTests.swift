@@ -34,7 +34,9 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
         let server = try TLSLoopbackServer(identity: fixture.identity, queue: queue)
 
         let listenerReady = expectation(description: "TLS listener ready")
-        let serverObservedSNI = expectation(description: "Server observed TLS SNI")
+        let serverObservedSNI = succeeds
+            ? expectation(description: "Server observed TLS SNI")
+            : nil
         let clientFinished = expectation(description: "Client TLS handshake completed")
         let clientCancelled = expectation(description: "Client connection cancelled")
 
@@ -49,7 +51,7 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
         }
         server.onSNI = { name in
             observedSNI = name
-            serverObservedSNI.fulfill()
+            serverObservedSNI?.fulfill()
         }
 
         server.start()
@@ -105,13 +107,20 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
             case .failed(let error):
                 clientFailure = error
                 clientFinished.fulfill()
+            case .waiting(let error):
+                // Network.framework can surface a TLS verification rejection
+                // as a waiting state rather than a terminal failed state.
+                // In this controlled loopback test, waiting is the observable
+                // rejection signal for the deliberately invalid certificate.
+                clientFailure = error
+                clientFinished.fulfill()
             default:
                 break
             }
         }
         connection.start(queue: queue)
 
-        if succeeds {
+        if succeeds, let serverObservedSNI {
             wait(for: [clientFinished, serverObservedSNI], timeout: 8)
         } else {
             wait(for: [clientFinished], timeout: 8)
