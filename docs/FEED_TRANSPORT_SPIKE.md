@@ -1,32 +1,74 @@
 # Feed transport hardening — implementation spike
 
 **Date:** 2026-11-20  
-**Status:** Research completed; implementation not yet verified  
+**Status:** TLS connection factory implemented; Apple-platform compile verified; runtime TLS behavior not yet verified  
 **Branch:** security/feed-url-hardening
 
 ## Problem
 
 FeedURLSafety validates URL syntax and literal IPs, but the current URLSession transport resolves DNS itself. A hostname that resolves to a private or special-purpose address can therefore bypass the current URL-shape checks. A separate DNS lookup followed by URLSession is not an acceptable fix: the HTTP stack may resolve the hostname again.
 
-## Candidate: Network.framework
+## Implemented prototype
 
-Apple's documentation provides two relevant capabilities:
+The current isolated prototype is in `NEWSFLOWApp/Infrastructure/Networking/PinnedTLSConnectionFactory.swift`.
+
+- `PinnedIPAddress` parses numeric IPv4 and IPv6 literals into Network.framework address types.
+- `PinnedTLSConnectionFactory.makeConnection(serverName:address:port:)` creates an `NWConnection` to the explicit numeric IP endpoint.
+- The original DNS hostname is validated through `NEWSFLOWCore.DNSHostname` and passed to `sec_protocol_options_set_tls_server_name`.
+- No trust override and no ordinary URLSession fallback are installed.
+- The caller remains responsible for DNS answer-set validation, starting/observing/cancelling the connection, timeout handling and HTTP.
+
+The prototype is deliberately not wired into the production feed path.
+
+## Verification completed
+
+For head commit `bdefaff5bc93456ba12075545e0cda3ead808fad`:
+
+- GitHub Actions **NEWSFLOW Core Tests**: success.
+  - Swift package tests (Linux): success.
+  - Swift package tests (Apple Foundation): success.
+- GitHub Actions **NEWSFLOW iOS Build**: success.
+  - Xcode simulator build: success.
+
+This confirms the cross-platform core tests and iOS target compilation. It does **not** verify a live NWConnection, the actual peer address, SNI, certificate hostname validation, system trust evaluation, cancellation or timeout behavior.
+
+The repository's current `project.yml` defines only the application target; there is not yet a dedicated iOS XCTest target for this integration proof. No TLS integration test has been run.
+
+## Required next proof: controlled TLS server
+
+Before expanding into DNS or HTTP, add an Apple-platform integration-test target and a controlled TLS server/client fixture. The proof must establish all of the following:
+
+1. The client connects to the selected numeric IPv4/IPv6 endpoint without a second hostname lookup.
+2. The server observes the expected peer address.
+3. The ClientHello carries the original DNS hostname as SNI.
+4. A certificate valid for that hostname succeeds under normal system trust evaluation.
+5. A hostname mismatch fails.
+6. An untrusted chain fails.
+7. Cancellation and timeout terminate the connection and complete the test exactly once.
+
+The test certificate strategy must preserve normal trust evaluation. Do not make a test pass by adding a trust-all callback or by disabling hostname verification. If a private test CA is used, install/trust it only in the isolated test environment and retain the normal chain and hostname checks.
+
+A local `NWListener` fixture is a candidate for the controlled server, but its TLS identity setup and trust-store isolation must be proven before treating it as an acceptance test. The existing app target alone is not a substitute for this test harness.
+
+## Candidate transport direction
+
+Apple documents two relevant capabilities:
 
 - NWConnection can target an explicit host/port endpoint.
-- sec_protocol_options_set_tls_server_name overrides the name derived from that endpoint for TLS SNI and peer-certificate hostname verification.
+- `sec_protocol_options_set_tls_server_name` sets the TLS server name independently of the numeric endpoint.
 
 Prototype direction for HTTPS:
 
 1. Resolve the feed hostname immediately before connection.
 2. Validate the complete A and AAAA answer set. Reject the entire set if any address is non-public or special-purpose.
 3. Select one validated address and construct a numeric IPv4/IPv6 endpoint. Do not pass the original DNS hostname as the network endpoint.
-4. Configure TLS server name to the original URL hostname. Keep normal system trust evaluation enabled; do not replace it with trust-all or chain-only validation.
+4. Configure TLS server name to the original URL hostname. Keep normal system trust evaluation enabled.
 5. Establish the connection and assert in integration tests that the remote peer is the selected numeric address.
 6. Send an HTTP/1.1 request with the original hostname in the Host header. Parse status, headers, content-length and chunked transfer encoding under strict byte/time limits.
 7. On redirect, close the current connection and repeat resolution, validation, pinning and TLS setup for the new destination.
 8. Propagate task cancellation to the active connection and resolver operation.
 
-This is a prototype direction, not an approved production implementation. Apple's TLS server-name API documentation establishes the override semantics, but does not by itself prove our complete connection, trust-evaluation and HTTP behavior.
+This remains a prototype direction, not an approved production implementation. API documentation and a successful simulator build do not prove complete connection, trust-evaluation and HTTP behavior.
 
 ## Required acceptance tests
 
@@ -54,7 +96,7 @@ This is a prototype direction, not an approved production implementation. Apple'
 
 ## Architecture boundary
 
-Keep URL/address policy and transport contracts in the cross-platform core. Put Network.framework and Apple resolver integration behind an Apple-platform adapter guarded by canImport(Network). Keep deterministic resolver/connector fakes in NEWSFLOWCore tests so Linux CI can test policy and orchestration without pretending to exercise Apple's network stack.
+Keep URL/address policy and transport contracts in the cross-platform core. Put Network.framework and Apple resolver integration behind an Apple-platform adapter guarded by `canImport(Network)`. Keep deterministic resolver/connector fakes in NEWSFLOWCore tests so Linux CI can test policy and orchestration without pretending to exercise Apple's network stack.
 
 Do not replace FeedHTTPClient or remove the existing URLSession implementation until the adapter passes the acceptance tests on Apple Foundation and iOS Simulator. The existing implementation remains subject to the documented DNS limitation.
 
@@ -66,4 +108,4 @@ Do not replace FeedHTTPClient or remove the existing URLSession implementation u
 
 ## Next implementation step
 
-Build a minimal Apple-platform proof of concept that opens a TLS connection to a controlled test server by numeric IP while setting the original DNS hostname as the TLS server name. Capture the server-side peer address and test both a valid hostname certificate and a hostname mismatch. Only after that succeeds should the work expand to HTTP parsing, DNS resolution and redirects.
+Create the iOS XCTest target and implement the controlled TLS fixture. First prove SNI, actual peer address and standard certificate validation for both success and failure cases. Do not proceed to the production resolver or HTTP implementation until this proof is reliable.
