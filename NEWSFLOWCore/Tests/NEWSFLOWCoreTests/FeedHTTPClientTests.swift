@@ -61,7 +61,12 @@ final class FeedHTTPClientTests: XCTestCase {
             "http://192.168.1.1/feed.xml",
             "http://169.254.169.254/latest/meta-data/",
             "http://100.64.0.1/feed.xml",
-            "http://224.0.0.1/feed.xml"
+            "http://224.0.0.1/feed.xml",
+            "http://0x7f000001/feed.xml",
+            "http://0x7f.0.0.1/feed.xml",
+            "http://0xA9FEA9FE/latest/meta-data/",
+            "http://[::1]/feed.xml",
+            "http://[::ffff:127.0.0.1]/feed.xml"
         ]
         for value in blocked {
             XCTAssertFalse(FeedSource.validatedHTTPURL(URL(string: value)!), "Expected to block \\(value)")
