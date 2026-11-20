@@ -4,7 +4,7 @@ import XCTest
 final class DNSHostnameTests: XCTestCase {
     func testAcceptsOrdinaryAndPunycodeHostnames() {
         XCTAssertEqual(DNSHostname("feeds.example.org")?.value, "feeds.example.org")
-        XCTAssertEqual(DNSHostname("xn--bro-hoa.example")?.value, "xn--bro-hoa.example")
+        XCTAssertEqual(DNSHostname("xn--bro-hoa.example.org")?.value, "xn--bro-hoa.example.org")
         XCTAssertEqual(DNSHostname("NEWS.Example.org")?.value, "NEWS.Example.org")
     }
 
