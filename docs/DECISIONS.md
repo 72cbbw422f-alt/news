@@ -47,7 +47,7 @@ Required design properties:
 
 An isolated `PinnedTLSConnectionFactory` now creates an `NWConnection` to a numeric IPv4/IPv6 endpoint and configures the original validated DNS hostname with `sec_protocol_options_set_tls_server_name`. The code is not connected to the production feed path.
 
-The latest previously verified code commit `bdefaff5bc93456ba12075545e0cda3ead808fad` passed Linux and Apple Foundation core tests and an Xcode iOS Simulator build. An iOS unit-test target and initial factory-configuration tests have since been added; their CI result is pending. These tests do not start a connection and do not prove peer-address routing, SNI, certificate validation or live TLS behavior.
+The code commit `dbaf716b69ed8970522174d64e01ac0ec4f248ec` added a controlled loopback TLS integration fixture: an `NWListener` server, numeric loopback client destination, server-side SNI observation, effective remote endpoint assertion, hostname mismatch rejection and untrusted-chain rejection. A test-only trust configurator is compiled only in Debug builds and uses `SecTrustEvaluateWithError` with a dedicated test CA and SSL hostname policy. The production factory exposes no trust override and retains default system trust evaluation. CI for the integration suite is pending; no live TLS behavior is claimed as verified until that run succeeds.
 
 See `docs/FEED_TRANSPORT_SPIKE.md` for the current implementation inventory, verification boundary, TLS test-harness requirements and remaining acceptance criteria.
 
