@@ -25,3 +25,15 @@ jobs:
       - name: Run NEWSFLOWCore tests
         working-directory: NEWSFLOWCore
         run: swift test
+
+  test-core-apple:
+    name: Swift package tests (Apple Foundation)
+    runs-on: macos-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Show toolchain
+        run: swift --version
+      - name: Run NEWSFLOWCore tests
+        working-directory: NEWSFLOWCore
+        run: swift test
