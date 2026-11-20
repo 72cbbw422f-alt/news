@@ -80,7 +80,7 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
                             && SecTrustEvaluateWithError(secTrust, nil)
                         complete(accepted)
                     },
-                    queue
+                    self.queue
                 )
             }
         )
@@ -152,7 +152,7 @@ private struct TLSFixture {
         let importStatus = SecPKCS12Import(pkcs12Data as CFData, importOptions, &importedItems)
         XCTAssertEqual(importStatus, errSecSuccess)
         let imported = try XCTUnwrap((importedItems as? [[String: Any]])?.first)
-        let identity = try XCTUnwrap(imported[kSecImportItemIdentity as String] as? SecIdentity)
+        let identity = imported[kSecImportItemIdentity as String] as! SecIdentity
 
         let pem = try String(contentsOf: caURL, encoding: .utf8)
         let certificateBody = pem
