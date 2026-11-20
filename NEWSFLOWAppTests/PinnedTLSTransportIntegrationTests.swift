@@ -74,10 +74,23 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
                             ? SecTrustSetAnchorCertificatesOnly(secTrust, true)
                             : errSecSuccess
                         let policyStatus = SecTrustSetPolicies(secTrust, policy)
+                        var trustError: CFError?
+                        let trustAccepted = SecTrustEvaluateWithError(secTrust, &trustError)
                         let accepted = anchorStatus == errSecSuccess
                             && anchorOnlyStatus == errSecSuccess
                             && policyStatus == errSecSuccess
-                            && SecTrustEvaluateWithError(secTrust, nil)
+                            && trustAccepted
+                        if !accepted {
+                            NSLog(
+                                "NEWSFLOW TLS test trust diagnostics: anchor=%d anchorOnly=%d policy=%d trustAccepted=%@ certificateCount=%ld error=%@",
+                                anchorStatus,
+                                anchorOnlyStatus,
+                                policyStatus,
+                                String(describing: trustAccepted),
+                                SecTrustGetCertificateCount(secTrust),
+                                String(describing: trustError)
+                            )
+                        }
                         complete(accepted)
                     },
                     self.queue
