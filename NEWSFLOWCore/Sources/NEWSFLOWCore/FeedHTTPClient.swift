@@ -17,6 +17,7 @@ public struct FeedHTTPClient: Sendable {
     public let maximumResponseBytes: Int
     public let timeout: TimeInterval
     public let maximumRedirects: Int
+    private let sessionConfiguration: FeedURLSessionConfiguration?
 
     public init(
         maximumResponseBytes: Int = 5 * 1_024 * 1_024,
@@ -26,6 +27,20 @@ public struct FeedHTTPClient: Sendable {
         self.maximumResponseBytes = max(1, maximumResponseBytes)
         self.timeout = max(1, timeout)
         self.maximumRedirects = max(0, maximumRedirects)
+        self.sessionConfiguration = nil
+    }
+
+    /// Internal injection point for deterministic transport tests.
+    init(
+        maximumResponseBytes: Int = 5 * 1_024 * 1_024,
+        timeout: TimeInterval = 20,
+        maximumRedirects: Int = 5,
+        sessionConfiguration: URLSessionConfiguration
+    ) {
+        self.maximumResponseBytes = max(1, maximumResponseBytes)
+        self.timeout = max(1, timeout)
+        self.maximumRedirects = max(0, maximumRedirects)
+        self.sessionConfiguration = FeedURLSessionConfiguration(sessionConfiguration)
     }
 
     public func fetch(_ url: URL) async throws -> Data {
@@ -48,9 +63,20 @@ public struct FeedHTTPClient: Sendable {
 
         let loader = BoundedFeedDownload(
             maximumBytes: maximumResponseBytes,
-            maximumRedirects: maximumRedirects
+            maximumRedirects: maximumRedirects,
+            sessionConfiguration: sessionConfiguration
         )
         return try await loader.download(request)
+    }
+}
+
+/// URLSessionConfiguration is reference-typed; this immutable wrapper permits
+/// safe injection into the Sendable client without exposing mutation.
+private final class FeedURLSessionConfiguration: @unchecked Sendable {
+    let value: URLSessionConfiguration
+
+    init(_ value: URLSessionConfiguration) {
+        self.value = value
     }
 }
 
@@ -59,20 +85,26 @@ public struct FeedHTTPClient: Sendable {
 private final class BoundedFeedDownload: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let maximumBytes: Int
     private let maximumRedirects: Int
+    private let sessionConfiguration: FeedURLSessionConfiguration?
     private var redirectCount = 0
     private var continuation: CheckedContinuation<Data, Error>?
     private var session: URLSession?
     private var buffer = Data()
 
-    init(maximumBytes: Int, maximumRedirects: Int) {
+    init(
+        maximumBytes: Int,
+        maximumRedirects: Int,
+        sessionConfiguration: FeedURLSessionConfiguration?
+    ) {
         self.maximumBytes = maximumBytes
         self.maximumRedirects = maximumRedirects
+        self.sessionConfiguration = sessionConfiguration
     }
 
     func download(_ request: URLRequest) async throws -> Data {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
             self.continuation = continuation
-            let configuration = URLSessionConfiguration.ephemeral
+            let configuration = sessionConfiguration?.value ?? URLSessionConfiguration.ephemeral
             configuration.timeoutIntervalForRequest = request.timeoutInterval
             configuration.timeoutIntervalForResource = request.timeoutInterval
             let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
