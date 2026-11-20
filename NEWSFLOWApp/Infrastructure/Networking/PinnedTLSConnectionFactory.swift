@@ -56,12 +56,15 @@ enum PinnedTLSConnectionFactory {
               !serverName.contains("@"),
               !serverName.contains(":"),
               !serverName.contains("?"),
-              !serverName.contains("#")
+              !serverName.contains("#"),
+              !serverName.contains("%"),
+              IPv4Address(serverName) == nil,
+              IPv6Address(serverName) == nil
         else {
             throw ConfigurationError.invalidServerName
         }
 
-        guard let endpointPort = NWEndpoint.Port(rawValue: port) else {
+        guard port > 0, let endpointPort = NWEndpoint.Port(rawValue: port) else {
             throw ConfigurationError.invalidPort
         }
 
