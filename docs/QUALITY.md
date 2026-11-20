@@ -18,6 +18,10 @@
 - [ ] Invalid XML and truncated documents.
 - [ ] Duplicate items and changed item metadata.
 - [ ] Large feed rejected at configured limits.
+- [ ] Private, loopback, link-local, shared, multicast and reserved IPv4 destinations rejected.
+- [ ] Local hostnames, embedded credentials, unsupported schemes and non-standard ports rejected.
+- [ ] Redirect destinations pass the same URL safety validation.
+- [ ] DNS resolution/address pinning limitations explicitly tracked.
 
 ## Release candidate
 - [ ] Clean build on supported Xcode.
