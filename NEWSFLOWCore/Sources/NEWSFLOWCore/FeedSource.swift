@@ -34,9 +34,6 @@ public struct FeedSource: Identifiable, Codable, Hashable, Sendable {
     }
 
     public static func validatedHTTPURL(_ url: URL) -> Bool {
-        guard let scheme = url.scheme?.lowercased(),
-              scheme == "https" || scheme == "http",
-              url.host != nil else { return false }
-        return true
+        FeedURLSafety.isAllowed(url)
     }
 }
