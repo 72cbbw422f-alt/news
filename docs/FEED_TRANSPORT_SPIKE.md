@@ -1,7 +1,7 @@
 # Feed transport hardening — implementation spike
 
 **Date:** 2026-11-20  
-**Status:** Controlled loopback TLS integration tests added; CI verification pending  
+**Status:** TLS integration harness present; iOS simulator verification failing (2026-11-20)  
 **Branch:** security/feed-url-hardening
 
 ## Problem
@@ -110,3 +110,15 @@ Do not replace FeedHTTPClient or remove the existing URLSession implementation u
 ## Next implementation step
 
 Run and review CI for the new loopback TLS integration tests. If they pass, extend the proof to IPv6 and cancellation/timeout edge cases, then begin the resolver and complete A/AAAA address policy. Keep the production feed transport unchanged until DNS, TLS and bounded HTTP behavior are all covered.
+
+
+## CI result — 2026-11-20 (commit `3d5b3572070b8fb9be561c8e92d4887fa9b814f0`)
+
+- `NEWSFLOW Core Tests` run `44814680729`: passed on Linux and Apple Foundation.
+- `NEWSFLOW iOS Build` run `44814680722`: simulator app build passed; `Run iOS unit tests` failed.
+- The integration suite executed 3 tests and reported 9 failures (2 unexpected). The trusted-hostname handshake did not reach `.ready`; the untrusted-chain case also timed out waiting for the client state callback. Simulator logs include BoringSSL `CERTIFICATE_VERIFY_FAILED` / `certificate unknown` alerts.
+- The current test harness therefore does **not** prove SNI, pinned remote endpoint, hostname validation or untrusted-chain rejection. The cancellation assertion also cannot be treated as an overall passing suite while the suite is red.
+- The exact trust-evaluation failure is not yet diagnosed: the callback currently discards the `CFError` from `SecTrustEvaluateWithError`, and the test does not record the individual `SecTrustSetAnchorCertificates`, `SecTrustSetAnchorCertificatesOnly` and policy results. Add test-only diagnostics before changing certificate/trust behavior.
+- Do not weaken trust evaluation, disable hostname validation, or change the production factory. Production feed transport remains on URLSession and unchanged.
+
+Next step: instrument the DEBUG-only test trust callback to record anchor/policy status and the `SecTrustEvaluateWithError` failure reason, then rerun the iOS simulator tests. Do not proceed to IPv6/DNS implementation until the controlled TLS handshake passes.
