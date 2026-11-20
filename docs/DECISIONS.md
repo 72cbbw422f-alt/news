@@ -29,7 +29,7 @@ YouTube, Bluesky and Reddit remain separate adapters. Their availability, rate l
 Only report compilation, tests, IPA creation or device verification when the corresponding operation was actually performed in a compatible environment.
 
 ## ADR-008 — DNS resolution and destination pinning for feed transport
-**Status:** Proposed — implementation spike required
+**Status:** Proposed — implementation spike in progress
 
 The current URL validator is a conservative URL-shape filter only. It does not resolve hostnames or control which address the HTTP stack ultimately connects to. DNS rebinding and hostnames resolving to private or special-purpose addresses therefore remain an SSRF gap.
 
@@ -45,8 +45,10 @@ Required design properties:
 
 ### Implementation spike findings (2026-11-20)
 
-Apple documents that Network.framework can create an NWConnection to an explicit host/port endpoint and that sec_protocol_options_set_tls_server_name overrides the endpoint-derived name used for TLS SNI and peer-certificate hostname verification. This makes an IP endpoint plus the original DNS hostname a viable prototype direction; it is not yet proof of a complete secure HTTP transport.
+An isolated `PinnedTLSConnectionFactory` now creates an `NWConnection` to a numeric IPv4/IPv6 endpoint and configures the original validated DNS hostname with `sec_protocol_options_set_tls_server_name`. The code is not connected to the production feed path.
 
-The prototype must still demonstrate the actual remote peer endpoint, normal system trust evaluation with hostname validation, DNS answer-set validation, HTTP framing and bounded streaming, redirect re-resolution, timeout and cancellation. See docs/FEED_TRANSPORT_SPIKE.md for the acceptance plan and unresolved risks.
+The latest head commit `bdefaff5bc93456ba12075545e0cda3ead808fad` passed Linux and Apple Foundation core tests and an Xcode iOS Simulator build. This is compile/test-suite verification only: no live NWConnection, peer-address, SNI or certificate-validation integration test has been executed.
 
-The implementation spike must prove, with integration tests, the actual peer address used by the connection, hostname-based TLS validation, mixed public/private DNS answers, IPv4 and IPv6 handling, redirect re-resolution, cancellation and bounded streaming. Until those tests pass, keep the current DNS limitation explicit and do not claim complete SSRF protection.
+See `docs/FEED_TRANSPORT_SPIKE.md` for the current implementation inventory, verification boundary, TLS test-harness requirements and remaining acceptance criteria.
+
+ADR-008 remains proposed. Do not claim complete SSRF protection, replace the current feed transport or merge the hardening branch until the controlled TLS proof, DNS answer-set policy, redirect re-resolution, HTTP framing/bounded streaming, timeout and cancellation tests have passed.
