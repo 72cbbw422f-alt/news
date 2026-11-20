@@ -33,6 +33,8 @@ targets:
       - path: NEWSFLOWAppTests
     dependencies:
       - target: NEWSFLOW
+    resources:
+      - path: NEWSFLOWAppTests/Fixtures
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.newsflow.ios.tests
