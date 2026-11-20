@@ -18,7 +18,8 @@
 - [ ] Invalid XML and truncated documents.
 - [ ] Duplicate items and changed item metadata.
 - [ ] Large feed rejected at configured limits.
-- [ ] Private, loopback, link-local, shared, multicast and reserved IPv4 destinations rejected.
+- [ ] Private, loopback, link-local, shared, multicast and reserved IPv4 destinations rejected, including hexadecimal and legacy numeric host forms.
+- [ ] IPv6 literals, including IPv4-mapped IPv6 loopback forms, are rejected.
 - [ ] Local hostnames, embedded credentials, unsupported schemes and non-standard ports rejected.
 - [ ] Redirect destinations pass the same URL safety validation.
 - [ ] An HTTP-level redirect to a loopback/private destination is rejected before the redirected request is issued.
