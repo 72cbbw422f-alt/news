@@ -30,6 +30,28 @@ enum PinnedIPAddress {
             return .ipv6(address)
         }
     }
+
+    /// Shared TLS-option construction seam. The optional configurator is
+    /// internal and exists for isolated integration tests; production callers
+    /// should leave it nil so system trust evaluation remains untouched.
+    static func makeTLSOptions(
+        serverName: String,
+        configure: ((NWProtocolTLS.Options) -> Void)? = nil
+    ) throws -> NWProtocolTLS.Options {
+        guard let validatedServerName = DNSHostname(serverName) else {
+            throw ConfigurationError.invalidServerName
+        }
+
+        let tlsOptions = NWProtocolTLS.Options()
+        validatedServerName.value.withCString {
+            sec_protocol_options_set_tls_server_name(
+                tlsOptions.securityProtocolOptions,
+                $0
+            )
+        }
+        configure?(tlsOptions)
+        return tlsOptions
+    }
 }
 
 /// Creates a TLS connection to a numeric IP while retaining the original DNS
@@ -49,7 +71,8 @@ enum PinnedTLSConnectionFactory {
     static func makeConnection(
         serverName: String,
         address: PinnedIPAddress,
-        port: UInt16
+        port: UInt16,
+        configureTLS: ((NWProtocolTLS.Options) -> Void)? = nil
     ) throws -> NWConnection {
         guard let validatedServerName = DNSHostname(serverName) else {
             throw ConfigurationError.invalidServerName
@@ -59,13 +82,10 @@ enum PinnedTLSConnectionFactory {
             throw ConfigurationError.invalidPort
         }
 
-        let tlsOptions = NWProtocolTLS.Options()
-        validatedServerName.value.withCString {
-            sec_protocol_options_set_tls_server_name(
-                tlsOptions.securityProtocolOptions,
-                $0
-            )
-        }
+        let tlsOptions = try makeTLSOptions(
+            serverName: validatedServerName.value,
+            configure: configureTLS
+        )
 
         let parameters = NWParameters(
             tls: tlsOptions,
