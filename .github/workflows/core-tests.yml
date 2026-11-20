@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: core-tests-${{ github.ref }}
+  group: core-tests-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
