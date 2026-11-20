@@ -15,12 +15,22 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
         try runTLSHandshake(serverName: "wrong.example.org", expectedHostname: "wrong.example.org", succeeds: false)
     }
 
+    func testPinnedLoopbackConnectionRejectsUntrustedCertificateChain() throws {
+        try runTLSHandshake(
+            serverName: "feeds.example.org",
+            expectedHostname: "feeds.example.org",
+            succeeds: false,
+            trustRoot: false
+        )
+    }
+
     private func runTLSHandshake(
         serverName: String,
         expectedHostname: String,
-        succeeds: Bool
+        succeeds: Bool,
+        trustRoot: Bool = true
     ) throws {
-        let fixture = try TLSFixture.load(testCase: self)
+        let fixture = try TLSFixture.load()
         let server = try TLSLoopbackServer(identity: fixture.identity, queue: queue)
 
         let listenerReady = expectation(description: "TLS listener ready")
@@ -30,7 +40,6 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
 
         var observedSNI: String?
         var observedRemoteHost: NWEndpoint.Host?
-        var clientConnection: NWConnection?
         var clientFailure: NWError?
         var listenerPort: NWEndpoint.Port?
 
@@ -58,8 +67,12 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
                     { _, trust, complete in
                         let secTrust = sec_trust_copy_ref(trust).takeRetainedValue()
                         let policy = SecPolicyCreateSSL(true, expectedHostname as CFString)
-                        let anchorStatus = SecTrustSetAnchorCertificates(secTrust, [fixture.rootCertificate] as CFArray)
-                        let anchorOnlyStatus = SecTrustSetAnchorCertificatesOnly(secTrust, true)
+                        let anchorStatus = trustRoot
+                            ? SecTrustSetAnchorCertificates(secTrust, [fixture.rootCertificate] as CFArray)
+                            : errSecSuccess
+                        let anchorOnlyStatus = trustRoot
+                            ? SecTrustSetAnchorCertificatesOnly(secTrust, true)
+                            : errSecSuccess
                         let policyStatus = SecTrustSetPolicies(secTrust, policy)
                         let accepted = anchorStatus == errSecSuccess
                             && anchorOnlyStatus == errSecSuccess
@@ -71,7 +84,6 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
                 )
             }
         )
-        clientConnection = connection
         connection.stateUpdateHandler = { state in
             switch state {
             case .ready:
@@ -86,7 +98,11 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
         }
         connection.start(queue: queue)
 
-        wait(for: [clientFinished, serverObservedSNI], timeout: 8)
+        if succeeds {
+            wait(for: [clientFinished, serverObservedSNI], timeout: 8)
+        } else {
+            wait(for: [clientFinished], timeout: 8)
+        }
 
         if succeeds {
             XCTAssertNil(clientFailure, "Expected valid TLS handshake, got \(String(describing: clientFailure))")
@@ -94,7 +110,9 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
         } else {
             XCTAssertNotNil(clientFailure, "Expected hostname validation to reject the certificate")
         }
-        XCTAssertEqual(observedSNI, serverName)
+        if succeeds {
+            XCTAssertEqual(observedSNI, serverName)
+        }
 
         connection.stateUpdateHandler = { state in
             if case .cancelled = state {
@@ -104,7 +122,6 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
         connection.cancel()
         wait(for: [clientCancelled], timeout: 3)
         server.stop()
-        clientConnection = nil
     }
 
     private static func host(from endpoint: NWEndpoint) -> NWEndpoint.Host? {
@@ -117,7 +134,7 @@ private struct TLSFixture {
     let identity: SecIdentity
     let rootCertificate: SecCertificate
 
-    static func load(testCase: XCTestCase) throws -> TLSFixture {
+    static func load() throws -> TLSFixture {
         let bundle = Bundle(for: PinnedTLSTransportIntegrationTests.self)
         let p12URL = try XCTUnwrap(bundle.url(forResource: "server.p12", withExtension: "base64", subdirectory: "Fixtures"))
         let caURL = try XCTUnwrap(bundle.url(forResource: "ca", withExtension: "pem", subdirectory: "Fixtures"))
