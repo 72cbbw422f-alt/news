@@ -57,7 +57,7 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
         let port = try XCTUnwrap(listenerPort)
 
         let pinnedAddress = try XCTUnwrap(PinnedIPAddress(literal: "127.0.0.1"))
-        let connection = try PinnedTLSConnectionFactory.makeConnection(
+        let connection = try PinnedTLSConnectionFactory.makeConnectionForTesting(
             serverName: serverName,
             address: pinnedAddress,
             port: port.rawValue,
