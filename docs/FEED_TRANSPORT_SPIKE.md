@@ -112,6 +112,22 @@ Do not replace FeedHTTPClient or remove the existing URLSession implementation u
 Run and review CI for the new loopback TLS integration tests. If they pass, extend the proof to IPv6 and cancellation/timeout edge cases, then begin the resolver and complete A/AAAA address policy. Keep the production feed transport unchanged until DNS, TLS and bounded HTTP behavior are all covered.
 
 
+## Certificate fixture diagnosis and correction — 2026-11-20
+
+The trust diagnostics from run `44818509219` identified the root cause: the test leaf certificate exceeded Apple's maximum temporal validity period. The Security framework returned OSStatus `-67901` with the explicit detail `Certificate exceeds maximum temporal validity period`. This was a test-fixture defect, not evidence that production trust evaluation should be relaxed.
+
+Regenerated the test-only CA and server identity:
+- Root CA: 2026-11-20 through 2036-11-17.
+- Server certificate: 2026-11-20 through 2027-11-20 (365 days).
+- SAN remains `DNS:feeds.example.org`.
+- PKCS#12 passphrase remains test-only.
+
+Fixture files updated:
+- `NEWSFLOWAppTests/Fixtures/ca.pem`
+- `NEWSFLOWAppTests/Fixtures/server.p12.base64`
+
+The simulator CI result for the renewed fixture is pending. Do not claim the TLS proof is successful until the iOS integration suite passes.
+
 ## CI result — 2026-11-20 (commit `3d5b3572070b8fb9be561c8e92d4887fa9b814f0`)
 
 - `NEWSFLOW Core Tests` run `44814680729`: passed on Linux and Apple Foundation.
