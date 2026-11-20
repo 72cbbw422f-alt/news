@@ -16,6 +16,9 @@ targets:
     dependencies:
       - package: NEWSFLOWCore
         product: NEWSFLOWCore
+    scheme:
+      testTargets:
+        - NEWSFLOWAppTests
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.newsflow.ios
