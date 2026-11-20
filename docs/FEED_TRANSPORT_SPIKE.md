@@ -1,7 +1,7 @@
 # Feed transport hardening — implementation spike
 
 **Date:** 2026-11-20  
-**Status:** TLS factory configuration tests added; live TLS behavior not yet verified  
+**Status:** Controlled loopback TLS integration tests added; CI verification pending  
 **Branch:** security/feed-url-hardening
 
 ## Problem
@@ -28,9 +28,19 @@ An iOS unit-test target, `NEWSFLOWAppTests`, is now declared in `project.yml`. T
 - Rejecting port zero.
 - Constructing an NWConnection from a validated DNS identity and a numeric endpoint, without starting the connection.
 
-These are configuration-construction unit tests only. They do **not** prove actual peer routing, emitted SNI, certificate hostname validation, trust-chain evaluation, connection establishment, timeout or cancellation.
+The integration suite in `NEWSFLOWAppTests/PinnedTLSTransportIntegrationTests.swift` adds a local `NWListener` TLS server and tests:
 
-The iOS workflow now runs the app simulator build and the iOS unit-test scheme on an available iPhone Simulator. CI results for this new target must be checked before treating the harness as build-verified.
+- Successful connection to the numeric loopback endpoint while sending the original DNS name as SNI.
+- The connected path's effective remote endpoint is the expected loopback IP.
+- A valid hostname succeeds and a hostname mismatch fails.
+- An untrusted certificate chain fails.
+- Connection cancellation reaches the cancelled state.
+
+The test fixture uses a dedicated test-only CA and PKCS#12 server identity. The client trust callback is exposed only through a `#if DEBUG` factory entry point and performs `SecTrustEvaluateWithError` with an isolated anchor and SSL hostname policy. The production factory has no configurable trust callback and retains default system trust evaluation. The fixture private key is not a production credential and must never be reused outside tests.
+
+The SNI assertion is made on the successful handshake. A hostname-mismatch handshake is expected to abort before the server reaches ready state, so it is not used as the SNI observation case.
+
+The iOS workflow runs the simulator build and unit-test scheme on an available iPhone Simulator. The new integration tests are not considered verified until that CI run passes.
 
 ## Required next proof: controlled TLS server
 
@@ -99,4 +109,4 @@ Do not replace FeedHTTPClient or remove the existing URLSession implementation u
 
 ## Next implementation step
 
-Run and review CI for the new test target. Then implement the controlled TLS fixture to prove peer address, SNI and standard certificate validation for both success and failure cases. Do not proceed to the production resolver or HTTP implementation until this proof is reliable.
+Run and review CI for the new loopback TLS integration tests. If they pass, extend the proof to IPv6 and cancellation/timeout edge cases, then begin the resolver and complete A/AAAA address policy. Keep the production feed transport unchanged until DNS, TLS and bounded HTTP behavior are all covered.
