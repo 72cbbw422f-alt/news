@@ -66,7 +66,7 @@ enum PinnedTLSConnectionFactory {
         serverName: String,
         address: PinnedIPAddress,
         port: UInt16,
-        configureTLS: (NWProtocolTLS.Options) -> Void
+        configureTLS: @escaping (NWProtocolTLS.Options) -> Void
     ) throws -> NWConnection {
         try buildConnection(
             serverName: serverName,
