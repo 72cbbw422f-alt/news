@@ -31,6 +31,23 @@ enum PinnedIPAddress {
         }
     }
 
+
+}
+
+/// Creates a TLS connection to a numeric IP while retaining the original DNS
+/// hostname for TLS SNI and certificate hostname verification.
+///
+/// This is an isolated implementation spike, not the production feed
+/// transport. The caller must validate DNS answers before constructing the
+/// IP address, start the returned connection, observe its state and cancel it
+/// when its owning task is cancelled. No trust override or URLSession fallback
+/// is installed here.
+enum PinnedTLSConnectionFactory {
+    enum ConfigurationError: Error {
+        case invalidServerName
+        case invalidPort
+    }
+
     /// Shared TLS-option construction seam. The optional configurator is
     /// internal and exists for isolated integration tests; production callers
     /// should leave it nil so system trust evaluation remains untouched.
@@ -52,22 +69,6 @@ enum PinnedIPAddress {
         configure?(tlsOptions)
         return tlsOptions
     }
-}
-
-/// Creates a TLS connection to a numeric IP while retaining the original DNS
-/// hostname for TLS SNI and certificate hostname verification.
-///
-/// This is an isolated implementation spike, not the production feed
-/// transport. The caller must validate DNS answers before constructing the
-/// IP address, start the returned connection, observe its state and cancel it
-/// when its owning task is cancelled. No trust override or URLSession fallback
-/// is installed here.
-enum PinnedTLSConnectionFactory {
-    enum ConfigurationError: Error {
-        case invalidServerName
-        case invalidPort
-    }
-
     static func makeConnection(
         serverName: String,
         address: PinnedIPAddress,
