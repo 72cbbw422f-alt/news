@@ -68,7 +68,8 @@ Read/saved state belongs to the user's local library, not the feed payload. Refr
 - Respect API terms, rate limits and user authorization for third-party services.
 - Background refresh is best-effort under iOS scheduling; manual refresh remains available.
 - Use cancellation and per-source concurrency limits to avoid runaway refreshes.
-- The initial transport enforces response size while streaming. Redirect destination validation remains a release-hardening task.
+- The initial transport enforces response size while streaming. Feed and redirect URLs reject non-HTTP(S) schemes, embedded credentials, non-standard ports, local/reserved hostnames, IPv6 literals and non-public IPv4 literals.
+- DNS names are not resolved and pinned to the validated connection address. DNS rebinding and hostnames resolving to private addresses therefore remain a known SSRF hardening gap; do not describe the current validator as complete private-network protection.
 
 ## Sync strategy
 Start local-first. Add CloudKit only after local persistence semantics are stable. Sync must define conflict resolution for read/saved state, source edits, deletions and duplicate merges. Users must be able to continue in local-only mode.
