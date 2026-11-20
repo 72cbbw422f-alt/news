@@ -136,8 +136,14 @@ private struct TLSFixture {
 
     static func load() throws -> TLSFixture {
         let bundle = Bundle(for: PinnedTLSTransportIntegrationTests.self)
-        let p12URL = try XCTUnwrap(bundle.url(forResource: "server.p12", withExtension: "base64", subdirectory: "Fixtures"))
-        let caURL = try XCTUnwrap(bundle.url(forResource: "ca", withExtension: "pem", subdirectory: "Fixtures"))
+        let p12URL = try XCTUnwrap(
+            bundle.url(forResource: "server.p12", withExtension: "base64", subdirectory: "Fixtures")
+                ?? bundle.url(forResource: "server.p12", withExtension: "base64")
+        )
+        let caURL = try XCTUnwrap(
+            bundle.url(forResource: "ca", withExtension: "pem", subdirectory: "Fixtures")
+                ?? bundle.url(forResource: "ca", withExtension: "pem")
+        )
 
         let encodedPKCS12 = try String(contentsOf: p12URL, encoding: .utf8)
         let pkcs12Data = try XCTUnwrap(Data(base64Encoded: encodedPKCS12.trimmingCharacters(in: .whitespacesAndNewlines)))
