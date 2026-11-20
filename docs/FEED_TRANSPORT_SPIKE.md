@@ -1,7 +1,7 @@
 # Feed transport hardening — implementation spike
 
 **Date:** 2026-11-20  
-**Status:** TLS connection factory implemented; Apple-platform compile verified; runtime TLS behavior not yet verified  
+**Status:** TLS factory configuration tests added; live TLS behavior not yet verified  
 **Branch:** security/feed-url-hardening
 
 ## Problem
@@ -10,33 +10,31 @@ FeedURLSafety validates URL syntax and literal IPs, but the current URLSession t
 
 ## Implemented prototype
 
-The current isolated prototype is in `NEWSFLOWApp/Infrastructure/Networking/PinnedTLSConnectionFactory.swift`.
+The isolated prototype is in `NEWSFLOWApp/Infrastructure/Networking/PinnedTLSConnectionFactory.swift`.
 
 - `PinnedIPAddress` parses numeric IPv4 and IPv6 literals into Network.framework address types.
 - `PinnedTLSConnectionFactory.makeConnection(serverName:address:port:)` creates an `NWConnection` to the explicit numeric IP endpoint.
 - The original DNS hostname is validated through `NEWSFLOWCore.DNSHostname` and passed to `sec_protocol_options_set_tls_server_name`.
 - No trust override and no ordinary URLSession fallback are installed.
-- The caller remains responsible for DNS answer-set validation, starting/observing/cancelling the connection, timeout handling and HTTP.
+- The prototype is not connected to the production feed path.
 
-The prototype is deliberately not wired into the production feed path.
+## Test harness added
 
-## Verification completed
+An iOS unit-test target, `NEWSFLOWAppTests`, is now declared in `project.yml`. The initial test suite in `NEWSFLOWAppTests/PinnedTLSConnectionFactoryTests.swift` covers:
 
-For head commit `bdefaff5bc93456ba12075545e0cda3ead808fad`:
+- Parsing IPv4 and IPv6 address literals.
+- Rejecting hostnames and malformed address literals as network destinations.
+- Rejecting local-style TLS identities.
+- Rejecting port zero.
+- Constructing an NWConnection from a validated DNS identity and a numeric endpoint, without starting the connection.
 
-- GitHub Actions **NEWSFLOW Core Tests**: success.
-  - Swift package tests (Linux): success.
-  - Swift package tests (Apple Foundation): success.
-- GitHub Actions **NEWSFLOW iOS Build**: success.
-  - Xcode simulator build: success.
+These are configuration-construction unit tests only. They do **not** prove actual peer routing, emitted SNI, certificate hostname validation, trust-chain evaluation, connection establishment, timeout or cancellation.
 
-This confirms the cross-platform core tests and iOS target compilation. It does **not** verify a live NWConnection, the actual peer address, SNI, certificate hostname validation, system trust evaluation, cancellation or timeout behavior.
-
-The repository's current `project.yml` defines only the application target; there is not yet a dedicated iOS XCTest target for this integration proof. No TLS integration test has been run.
+The iOS workflow now runs the app simulator build and the iOS unit-test scheme on an available iPhone Simulator. CI results for this new target must be checked before treating the harness as build-verified.
 
 ## Required next proof: controlled TLS server
 
-Before expanding into DNS or HTTP, add an Apple-platform integration-test target and a controlled TLS server/client fixture. The proof must establish all of the following:
+Before expanding into DNS or HTTP, add a controlled TLS server/client integration fixture. The proof must establish all of the following:
 
 1. The client connects to the selected numeric IPv4/IPv6 endpoint without a second hostname lookup.
 2. The server observes the expected peer address.
@@ -46,20 +44,13 @@ Before expanding into DNS or HTTP, add an Apple-platform integration-test target
 6. An untrusted chain fails.
 7. Cancellation and timeout terminate the connection and complete the test exactly once.
 
-The test certificate strategy must preserve normal trust evaluation. Do not make a test pass by adding a trust-all callback or by disabling hostname verification. If a private test CA is used, install/trust it only in the isolated test environment and retain the normal chain and hostname checks.
+The certificate strategy must preserve normal trust evaluation. Do not make a test pass by adding a trust-all callback or disabling hostname verification. If a private test CA is used, isolate its trust configuration to the test environment and retain normal chain and hostname checks.
 
-A local `NWListener` fixture is a candidate for the controlled server, but its TLS identity setup and trust-store isolation must be proven before treating it as an acceptance test. The existing app target alone is not a substitute for this test harness.
+A local `NWListener` fixture is a candidate for the controlled server, but its TLS identity setup and trust-store isolation must be proven before treating it as an acceptance test.
 
 ## Candidate transport direction
 
-Apple documents two relevant capabilities:
-
-- NWConnection can target an explicit host/port endpoint.
-- `sec_protocol_options_set_tls_server_name` sets the TLS server name independently of the numeric endpoint.
-
-Prototype direction for HTTPS:
-
-1. Resolve the feed hostname immediately before connection.
+1. Resolve the feed hostname immediately before connecting.
 2. Validate the complete A and AAAA answer set. Reject the entire set if any address is non-public or special-purpose.
 3. Select one validated address and construct a numeric IPv4/IPv6 endpoint. Do not pass the original DNS hostname as the network endpoint.
 4. Configure TLS server name to the original URL hostname. Keep normal system trust evaluation enabled.
@@ -108,4 +99,4 @@ Do not replace FeedHTTPClient or remove the existing URLSession implementation u
 
 ## Next implementation step
 
-Create the iOS XCTest target and implement the controlled TLS fixture. First prove SNI, actual peer address and standard certificate validation for both success and failure cases. Do not proceed to the production resolver or HTTP implementation until this proof is reliable.
+Run and review CI for the new test target. Then implement the controlled TLS fixture to prove peer address, SNI and standard certificate validation for both success and failure cases. Do not proceed to the production resolver or HTTP implementation until this proof is reliable.
