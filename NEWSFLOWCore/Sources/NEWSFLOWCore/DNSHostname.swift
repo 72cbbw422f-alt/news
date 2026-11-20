@@ -26,6 +26,14 @@ public struct DNSHostname: Hashable, Sendable {
         let labels = value.split(separator: ".", omittingEmptySubsequences: false)
         guard labels.count >= 2 else { return nil }
 
+        let blockedSuffixes = ["local", "localhost", "internal", "lan", "home", "test", "invalid", "example"]
+        let normalizedLabels = labels.map { $0.lowercased() }
+        guard !blockedSuffixes.contains(normalizedLabels.last ?? ""),
+              !blockedSuffixes.contains(normalizedLabels.joined(separator: "."))
+        else {
+            return nil
+        }
+
         var containsLetter = false
         for label in labels {
             guard !label.isEmpty,
