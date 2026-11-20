@@ -27,8 +27,13 @@ private final class RedirectingURLProtocol: URLProtocol {
             return
         }
 
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocolDidFinishLoading(self)
+        var redirectedRequest = URLRequest(url: URL(string: "http://127.0.0.1/private")!)
+        redirectedRequest.httpMethod = "GET"
+        client?.urlProtocol(
+            self,
+            wasRedirectedTo: redirectedRequest,
+            redirectResponse: response
+        )
     }
 
     override func stopLoading() {}
