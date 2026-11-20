@@ -1,5 +1,38 @@
 import XCTest
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 @testable import NEWSFLOWCore
+
+private final class RedirectingURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "news.example.org"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let url = request.url,
+              let response = HTTPURLResponse(
+                url: url,
+                statusCode: 302,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Location": "http://127.0.0.1/private"]
+              )
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
 
 final class FeedHTTPClientTests: XCTestCase {
     func testClientClampsInvalidLimitsToSafeMinimums() {
@@ -62,4 +95,19 @@ final class FeedHTTPClientTests: XCTestCase {
         XCTAssertFalse(FeedURLSafety.isAllowed(URL(string: "https://127.0.0.1/private")!))
         XCTAssertTrue(FeedURLSafety.isAllowed(URL(string: "https://news.example.org/feed")!))
     }
+    func testActualHTTPRedirectToLoopbackIsRejectedBeforeFollowingIt() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [RedirectingURLProtocol.self]
+        let client = FeedHTTPClient(sessionConfiguration: configuration)
+
+        do {
+            _ = try await client.fetch(URL(string: "https://news.example.org/feed.xml")!)
+            XCTFail("Expected unsafe redirect error")
+        } catch let error as FeedHTTPError {
+            XCTAssertEqual(error, .unsafeRedirect)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
 }
