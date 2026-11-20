@@ -7,6 +7,7 @@ All notable project changes are recorded here.
 - Blocked non-public IPv4 literals, local/reserved hostnames, IPv6 literals, embedded credentials, unsupported schemes and non-standard ports.
 - Added regression tests for private-network and malformed destination cases, including hexadecimal IPv4 and IPv6 literal bypass forms.
 - Added an HTTP-level redirect regression test proving loopback redirect targets are rejected before following the redirect.
+- Added Apple Foundation transport coverage proving redirect chains stop at the configured maximum.
 - DNS resolution/address pinning is not implemented; DNS rebinding remains a known limitation.
 
 ## Unreleased — Phase 1 foundation
