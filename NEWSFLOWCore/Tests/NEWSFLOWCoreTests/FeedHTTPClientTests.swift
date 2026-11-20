@@ -5,6 +5,7 @@ import FoundationNetworking
 #endif
 @testable import NEWSFLOWCore
 
+#if !canImport(FoundationNetworking)
 private final class RedirectingURLProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.host == "news.example.org"
@@ -38,6 +39,7 @@ private final class RedirectingURLProtocol: URLProtocol {
 
     override func stopLoading() {}
 }
+#endif
 
 final class FeedHTTPClientTests: XCTestCase {
     func testClientClampsInvalidLimitsToSafeMinimums() {
@@ -105,6 +107,7 @@ final class FeedHTTPClientTests: XCTestCase {
         XCTAssertFalse(FeedURLSafety.isAllowed(URL(string: "https://127.0.0.1/private")!))
         XCTAssertTrue(FeedURLSafety.isAllowed(URL(string: "https://news.example.org/feed")!))
     }
+    #if !canImport(FoundationNetworking)
     func testActualHTTPRedirectToLoopbackIsRejectedBeforeFollowingIt() async {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [RedirectingURLProtocol.self]
@@ -119,5 +122,6 @@ final class FeedHTTPClientTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+    #endif
 
 }
