@@ -2,7 +2,7 @@ name: NEWSFLOW Core Tests
 
 on:
   push:
-    branches: [main, "foundation/**"]
+    branches: [main, "foundation/**", "security/**"]
   pull_request:
     branches: [main]
   workflow_dispatch:
