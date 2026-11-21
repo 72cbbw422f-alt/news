@@ -124,6 +124,9 @@ final class FeedHTTPClientTests: XCTestCase {
             "http://169.254.169.254/latest/meta-data/",
             "http://100.64.0.1/feed.xml",
             "http://224.0.0.1/feed.xml",
+            "http://192.31.196.1/feed.xml",
+            "http://192.52.193.1/feed.xml",
+            "http://192.175.48.1/feed.xml",
             "http://0x7f000001/feed.xml",
             "http://0x7f.0.0.1/feed.xml",
             "http://0xA9FEA9FE/latest/meta-data/",
@@ -137,6 +140,7 @@ final class FeedHTTPClientTests: XCTestCase {
 
     func testAllowsPublicIPv4AndOrdinaryHTTPSHostnames() {
         XCTAssertTrue(FeedSource.validatedHTTPURL(URL(string: "https://8.8.8.8/feed.xml")!))
+        XCTAssertTrue(FeedSource.validatedHTTPURL(URL(string: "https://1.1.1.1/feed.xml")!))
         XCTAssertTrue(FeedSource.validatedHTTPURL(URL(string: "https://feeds.example-news.net/rss.xml")!))
     }
 
