@@ -124,6 +124,7 @@ The initial candidate, `DNSServiceGetAddrInfo`, is asynchronous and supports IPv
 - `kDNSServiceFlagsMoreComing` only indicates that another result is already queued. When it is absent, no more results are queued *at that instant*; additional answers can arrive later. It is not a completion signal for both address families.
 - `kDNSServiceFlagsTimeout` stops the query after a system-determined interval and delivers `kDNSServiceErr_Timeout`, even if answers arrived earlier. That timeout callback cannot safely be treated as successful completion.
 - `DNSServiceRefDeallocate` does provide a cancellation mechanism, but cancellation alone does not solve the missing completion boundary.
+- Splitting the work into separate `DNSServiceQueryRecord` requests for A and AAAA does not fix this: Apple documents each query as running indefinitely until its `DNSServiceRef` is deallocated, and its callback exposes the same `MoreComing` batching flag rather than a one-shot end-of-answer-set event. Two independent queries also require a robust way to establish completion for both families, which this API does not provide.
 
 The alternative `CFHost` APIs expose asynchronous resolution and cancellation, but Apple's current documentation marks the CFHost API family deprecated. The POSIX `getaddrinfo` API is synchronous; Apple's archived guidance also notes that it may cancel outstanding IPv6 work shortly after receiving an IPv4 answer, so it cannot be assumed to return the complete A+AAAA set required here.
 
