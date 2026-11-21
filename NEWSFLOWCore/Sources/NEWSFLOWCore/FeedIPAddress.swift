@@ -85,3 +85,31 @@ public enum FeedIPAddress: Hashable, Sendable {
         }
     }
 }
+
+
+/// Validates a complete resolver answer set. A single unsafe or malformed
+/// address rejects the entire set; callers must never filter unsafe answers
+/// and continue with only the remaining public addresses.
+public enum FeedIPAddressPolicy {
+    public enum ValidationError: Error, Equatable {
+        case emptyAnswerSet
+        case invalidAddress(String)
+        case nonPublicAddress(String)
+    }
+
+    public static func validateAnswerSet(_ literals: [String]) throws -> [FeedIPAddress] {
+        guard !literals.isEmpty else {
+            throw ValidationError.emptyAnswerSet
+        }
+
+        return try literals.map { literal in
+            guard let address = FeedIPAddress(literal) else {
+                throw ValidationError.invalidAddress(literal)
+            }
+            guard address.isPublicUnicast else {
+                throw ValidationError.nonPublicAddress(literal)
+            }
+            return address
+        }
+    }
+}
