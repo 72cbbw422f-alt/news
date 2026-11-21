@@ -84,6 +84,32 @@ final class FeedIPAddressTests: XCTestCase {
         }
     }
 
+    func testConnectedPeerValidationAcceptsPublicIPv4AndIPv6() throws {
+        XCTAssertEqual(
+            try FeedIPAddressPolicy.validateConnectedPeer("8.8.8.8"),
+            FeedIPAddress("8.8.8.8")
+        )
+        XCTAssertEqual(
+            try FeedIPAddressPolicy.validateConnectedPeer("2001:4860:4860::8888"),
+            FeedIPAddress("2001:4860:4860::8888")
+        )
+    }
+
+    func testConnectedPeerValidationRejectsMalformedAndNonPublicPeers() {
+        XCTAssertThrowsError(try FeedIPAddressPolicy.validateConnectedPeer("not-an-ip")) { error in
+            XCTAssertEqual(
+                error as? FeedIPAddressPolicy.ValidationError,
+                .invalidAddress("not-an-ip")
+            )
+        }
+        XCTAssertThrowsError(try FeedIPAddressPolicy.validateConnectedPeer("127.0.0.1")) { error in
+            XCTAssertEqual(
+                error as? FeedIPAddressPolicy.ValidationError,
+                .nonPublicAddress("127.0.0.1")
+            )
+        }
+    }
+
     func testAnswerSetRejectsEmptyMalformedAndMixedPublicPrivateResults() {
         XCTAssertThrowsError(try FeedIPAddressPolicy.validateAnswerSet([])) { error in
             XCTAssertEqual(error as? FeedIPAddressPolicy.ValidationError, .emptyAnswerSet)
