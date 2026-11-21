@@ -1,7 +1,7 @@
 # Feed transport hardening — implementation spike
 
 **Date:** 2026-11-20  
-**Status:** TLS integration harness present; iOS simulator verification failing (2026-11-20)  
+**Status:** TLS integration harness verified; IP address policy implemented, CI verification pending (2026-11-21)  
 **Branch:** security/feed-url-hardening
 
 ## Problem
@@ -138,3 +138,25 @@ The simulator CI result for the renewed fixture is pending. Do not claim the TLS
 - Do not weaken trust evaluation, disable hostname validation, or change the production factory. Production feed transport remains on URLSession and unchanged.
 
 Next step: instrument the DEBUG-only test trust callback to record anchor/policy status and the `SecTrustEvaluateWithError` failure reason, then rerun the iOS simulator tests. Do not proceed to IPv6/DNS implementation until the controlled TLS handshake passes.
+
+## Verified TLS milestone — 2026-11-21
+
+Commit `16df70dc9fe3deb1ec43197ee6a211f902917432` passed all CI jobs:
+- Core Tests on Linux: passed (27 tests).
+- Core Tests on Apple Foundation: passed.
+- iOS Simulator build and tests: passed (8 tests total).
+- TLS integration tests: 3 passed, 0 failures. The suite verifies trusted-hostname success, hostname mismatch rejection, untrusted-chain rejection, SNI on the successful handshake, numeric loopback remote endpoint and cancellation.
+
+The test harness now treats Network.framework's `.waiting(error)` state as an observable TLS rejection in the negative handshake cases. This is test-harness behavior only; production TLS trust configuration was not changed.
+
+## IP address policy implementation — 2026-11-21
+
+Added `NEWSFLOWCore/Sources/NEWSFLOWCore/FeedIPAddress.swift`:
+- Parses numeric IPv4 and IPv6 literals using the platform C networking parser.
+- Exposes a conservative `isPublicUnicast` classification.
+- Rejects private, loopback, link-local, shared, multicast, documentation, reserved and selected transition/special-purpose ranges.
+- Adds `FeedIPAddressPolicy.validateAnswerSet`, which rejects an empty set, malformed addresses or the entire set when any member is non-public. It never filters unsafe answers and continues with a subset.
+
+Added `NEWSFLOWCore/Tests/NEWSFLOWCoreTests/FeedIPAddressTests.swift` to cover accepted public IPv4/IPv6 addresses, special-purpose ranges, malformed literals and mixed public/private answer sets.
+
+This is address-policy groundwork only. No DNS resolver, DNS cancellation, numeric-IP connection orchestration, redirect re-resolution or production transport integration has been implemented. The new policy must pass Linux and Apple Foundation CI before it is considered verified.
