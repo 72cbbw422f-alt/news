@@ -13,6 +13,39 @@ private enum StubResolverError: Error, Equatable {
     case unavailable
 }
 
+private actor ResolverStartSignal {
+    private var hasStarted = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func markStarted() {
+        hasStarted = true
+        let pending = waiters
+        waiters.removeAll()
+        pending.forEach { $0.resume() }
+    }
+
+    func waitUntilStarted() async {
+        if hasStarted { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+}
+
+private actor SuspendedFeedAddressResolver: FeedAddressResolving {
+    private let signal: ResolverStartSignal
+
+    init(signal: ResolverStartSignal) {
+        self.signal = signal
+    }
+
+    func resolveAddresses(for hostname: DNSHostname) async throws -> [String] {
+        await signal.markStarted()
+        try await Task.sleep(nanoseconds: 30_000_000_000)
+        return ["8.8.8.8"]
+    }
+}
+
 final class FeedAddressResolutionTests: XCTestCase {
     func testResolvesAndReturnsEveryValidatedPublicAddress() async throws {
         let resolver = StubFeedAddressResolver(
@@ -97,6 +130,28 @@ final class FeedAddressResolutionTests: XCTestCase {
             XCTFail("Expected resolver failure")
         } catch let error as StubResolverError {
             XCTAssertEqual(error, .unavailable)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testPropagatesCancellationWhileResolverIsSuspended() async {
+        let signal = ResolverStartSignal()
+        let resolver = SuspendedFeedAddressResolver(signal: signal)
+        let service = FeedAddressResolutionService(resolver: resolver)
+
+        let resolutionTask = Task {
+            try await service.resolvePublicAddresses(for: "feeds.example.org")
+        }
+
+        await signal.waitUntilStarted()
+        resolutionTask.cancel()
+
+        do {
+            _ = try await resolutionTask.value
+            XCTFail("Expected cancellation to propagate from the resolver")
+        } catch is CancellationError {
+            // The resolver was already running and its suspended operation observed cancellation.
         } catch {
             XCTFail("Unexpected error: \(error)")
         }
