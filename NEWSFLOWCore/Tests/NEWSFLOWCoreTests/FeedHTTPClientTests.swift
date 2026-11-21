@@ -160,6 +160,8 @@ final class FeedHTTPClientTests: XCTestCase {
     func testRejectsCredentialAndNonStandardPortURLTricks() {
         XCTAssertFalse(FeedSource.validatedHTTPURL(URL(string: "https://user:pass@feeds.example.org/rss")!))
         XCTAssertFalse(FeedSource.validatedHTTPURL(URL(string: "http://feeds.example.org:8080/rss")!))
+        XCTAssertFalse(FeedSource.validatedHTTPURL(URL(string: "https://feeds.example.org:80/rss")!))
+        XCTAssertFalse(FeedSource.validatedHTTPURL(URL(string: "http://feeds.example.org:443/rss")!))
     }
 
     func testRedirectDestinationUsesSameSafetyValidation() {
