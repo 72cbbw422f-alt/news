@@ -111,7 +111,7 @@ private final class FeedConnectionAttempt: @unchecked Sendable {
                 lock.lock()
                 if cancellationRequested {
                     lock.unlock()
-                    controller.cancel()
+                    // The cancellation handler already closed the controller.
                     continuation.resume(throwing: CancellationError())
                     return
                 }
@@ -131,8 +131,15 @@ private final class FeedConnectionAttempt: @unchecked Sendable {
                 }
                 lock.unlock()
 
+                lock.lock()
+                guard !finished else {
+                    lock.unlock()
+                    timeoutWork.cancel()
+                    return
+                }
                 queue.asyncAfter(deadline: .now() + timeout, execute: timeoutWork)
                 controller.start(on: queue)
+                lock.unlock()
             }
         } onCancel: {
             cancel()
