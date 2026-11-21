@@ -182,7 +182,11 @@ private final class BoundedFeedDownload: NSObject, URLSessionDataDelegate, @unch
             finish(.failure(FeedHTTPError.tooManyRedirects))
             return
         }
-        guard let destination = request.url, FeedSource.validatedHTTPURL(destination) else {
+        guard let sourceScheme = response.url?.scheme?.lowercased(),
+              let destination = request.url,
+              FeedSource.validatedHTTPURL(destination),
+              !(sourceScheme == "https" && destination.scheme?.lowercased() == "http")
+        else {
             completionHandler(nil)
             finish(.failure(FeedHTTPError.unsafeRedirect))
             return
