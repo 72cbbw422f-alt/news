@@ -71,3 +71,12 @@ Apple's NetworkExtension DNS settings configure encrypted DNS at the system leve
 **Decision:** Do not silently introduce a third-party DoH provider or make DoH the default. The architecture decision must explicitly choose between preserving system/VPN DNS behavior with a weaker guarantee that validates every address actually returned by the system resolver and connects only to a validated numeric endpoint, or an opt-in application-managed DoH mode with provider and privacy disclosure. Neither option is implemented yet. The existing URLSession feed transport remains unchanged and retains the documented SSRF/DNS-rebinding limitation.
 
 See `docs/FEED_TRANSPORT_SPIKE.md` for the detailed trade-offs and protocol requirements.
+
+
+### DNS-over-HTTPS candidate — 2026-11-21
+
+DoH (RFC 8484) is the strongest resolver candidate identified so far because each HTTPS exchange returns a bounded DNS wire message. Explicit A and AAAA queries can be parsed independently, then combined under a fail-closed policy. The DNS response code, question, answer records, CNAME chain and truncation/malformed conditions must be validated; HTTP 2xx alone is not DNS success. Cancellation, response bounds, timeouts and redirect restrictions must be enforced.
+
+DoH does not create an atomic A+AAAA snapshot, and it changes the privacy/trust model: feed hostnames are disclosed to a third-party resolver, and the app bypasses the device's configured resolver (including VPN/custom/managed DNS). TLS to the DoH server is not DNSSEC validation. The resolver endpoint also needs a trusted bootstrap and normal TLS validation. Apple DNS Settings APIs configure user-enabled system-wide DNS and are not an app-local resolver API; DNS Proxy is a separate system extension architecture.
+
+**Decision:** candidate only; not approved as the default. Before implementation, explicitly decide whether the product accepts an external resolver and its privacy implications, choose the provider and bootstrap strategy, define dual-stack/CNAME completeness and failure semantics, and select a maintained DNS wire-format parser. See `docs/FEED_TRANSPORT_SPIKE.md` for the full evaluation and references.
