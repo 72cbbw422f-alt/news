@@ -23,8 +23,17 @@ public enum FeedURLSafety {
             return false
         }
 
-        let host = rawHost.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        guard !host.isEmpty else { return false }
+        // Reject root-dot and empty-label forms instead of normalizing them.
+        // Single-label names can be expanded through local DNS search domains.
+        let host = rawHost.lowercased()
+        guard !host.isEmpty,
+              !host.hasPrefix("."),
+              !host.hasSuffix("."),
+              !host.contains(".."),
+              host.utf8.count <= 253
+        else {
+            return false
+        }
 
         // IPv6 literals are rejected conservatively until address-range validation
         // and DNS/address pinning can be implemented consistently on all platforms.
@@ -58,7 +67,7 @@ public enum FeedURLSafety {
 
         // Reject malformed host labels and trailing/empty labels.
         let labels = host.split(separator: ".", omittingEmptySubsequences: false)
-        guard !labels.isEmpty, labels.allSatisfy({ label in
+        guard labels.count >= 2, labels.allSatisfy({ label in
             !label.isEmpty &&
             label.count <= 63 &&
             label.first != "-" &&
