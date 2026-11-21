@@ -494,3 +494,12 @@ References:
 - Apple NWParameters.PrivacyContext: https://developer.apple.com/documentation/network/nwparameters/privacycontext
 - Apple requireEncryptedNameResolution: https://developer.apple.com/documentation/network/nwparameters/privacycontext/requireencryptednameresolution(_:fallbackresolver:)
 - Apple Network establishment reports: https://developer.apple.com/documentation/network/network-functions
+
+
+### NetworkConnection with a numeric endpoint: TLS hostname override remains unverified
+
+A potentially useful hybrid deserves separate verification: construct the new `NetworkConnection` with an already validated numeric `NWEndpoint.hostPort`, then preserve the feed hostname for TLS SNI and certificate hostname validation. This would retain numeric destination pinning while gaining the new API's structured-concurrency lifecycle and system-managed path behavior.
+
+The public WWDC25 examples establish connect-by-name, TLS protocol builders and connection cancellation, but do not demonstrate a TLS server-name override for a numeric endpoint. Apple's lower-level `sec_protocol_options_set_tls_server_name` explicitly overrides the name used for peer-certificate verification, and the current `NWConnection` factory uses it. The new Swift builder's documented examples expose TLS modifiers such as peer authentication, identity and certificate validation, but the reviewed public material does not establish an equivalent server-name modifier or a supported way to obtain its underlying `sec_protocol_options_t`.
+
+Do not infer that a numeric endpoint automatically preserves the original hostname for SNI or hostname verification. Nor should a custom certificate validator be treated as equivalent without proving both SNI behavior and normal system trust/hostname validation. A small iOS 26-only compile-and-loopback experiment could answer this, but it is not necessary to proceed with the current proven `NWConnection` TLS spike and must not be used as a production replacement until it passes the same positive and negative TLS tests.
