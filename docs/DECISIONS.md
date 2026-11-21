@@ -43,11 +43,15 @@ Required design properties:
 - Keep the transport behind a small injectable protocol so NEWSFLOWCore tests can use deterministic resolver and connection fakes. The app/platform adapter may use Network.framework or another transport that can demonstrably satisfy the TLS and address-pinning requirements.
 - Do not silently fall back to ordinary URLSession for a hostname when pinning is unavailable. Fail closed.
 
-### Implementation spike findings (2026-11-20)
+### Implementation spike findings (2026-11-21)
 
-An isolated `PinnedTLSConnectionFactory` now creates an `NWConnection` to a numeric IPv4/IPv6 endpoint and configures the original validated DNS hostname with `sec_protocol_options_set_tls_server_name`. The code is not connected to the production feed path.
+The isolated `PinnedTLSConnectionFactory` creates an `NWConnection` to a numeric IPv4/IPv6 endpoint and configures the original validated DNS hostname for TLS SNI. The production feed path remains unchanged.
 
-The code commit `dbaf716b69ed8970522174d64e01ac0ec4f248ec` added a controlled loopback TLS integration fixture: an `NWListener` server, numeric loopback client destination, server-side SNI observation, effective remote endpoint assertion, hostname mismatch rejection and untrusted-chain rejection. A test-only trust configurator is compiled only in Debug builds and uses `SecTrustEvaluateWithError` with a dedicated test CA and SSL hostname policy. The production factory exposes no trust override and retains default system trust evaluation. CI result on 2026-11-20: Core Tests passed on Linux and Apple Foundation, and the iOS simulator app build passed, but the iOS unit-test step failed in the new TLS integration suite. The trusted-hostname handshake did not reach ready and simulator logs reported certificate verification failure. A test-only trust diagnostic identified the cause as the leaf certificate exceeding Apple's maximum temporal validity period (OSStatus -67901). The test CA and server identity have been regenerated with a 365-day leaf certificate; the renewed simulator result is pending. No live TLS behavior is claimed as verified. See `docs/FEED_TRANSPORT_SPIKE.md` for run IDs and the next diagnostic step.
+The controlled loopback TLS integration suite is now verified on iOS Simulator. Commit `16df70dc9fe3deb1ec43197ee6a211f902917432` passed Core Tests on Linux (27 tests), Core Tests on Apple Foundation, and iOS Simulator build/tests (8 tests; 0 failures). The three TLS integration cases passed: trusted hostname, hostname mismatch rejection and untrusted-chain rejection. The success case asserts SNI and the numeric loopback remote endpoint; cancellation is also exercised. Test-only trust configuration remains behind a DEBUG-only factory entry point. Production TLS retains default system trust evaluation.
+
+A cross-platform `FeedIPAddress` value and conservative public-unicast policy have now been added to NEWSFLOWCore. `FeedIPAddressPolicy.validateAnswerSet` fails closed for empty, malformed or mixed public/non-public resolver answer sets. Unit tests cover ordinary public IPv4/IPv6 and private, loopback, link-local, shared, multicast, documentation, reserved and selected transition/special-purpose ranges. CI for these new files is pending; they are not yet considered verified.
+
+No DNS resolver or production connection orchestration is implemented. The existing URLSession feed transport remains in place and remains subject to the documented DNS rebinding gap. See `docs/FEED_TRANSPORT_SPIKE.md` for exact files, tests and the current verification boundary.
 
 See `docs/FEED_TRANSPORT_SPIKE.md` for the current implementation inventory, verification boundary, TLS test-harness requirements and remaining acceptance criteria.
 
