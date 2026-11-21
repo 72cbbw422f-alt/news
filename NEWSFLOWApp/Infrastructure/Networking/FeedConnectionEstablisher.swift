@@ -163,13 +163,20 @@ private final class FeedConnectionAttempt: @unchecked Sendable {
 
     private func cancel() {
         lock.lock()
+        guard !finished else {
+            lock.unlock()
+            return
+        }
         cancellationRequested = true
         let hasContinuation = continuation != nil
         lock.unlock()
 
-        controller.cancel()
         if hasContinuation {
+            // finish() owns the single cancellation of an active attempt.
             finish(.failure(CancellationError()))
+        } else {
+            // Cancellation can arrive before the continuation is installed.
+            controller.cancel()
         }
     }
 
