@@ -11,6 +11,11 @@ final class FeedIPAddressTests: XCTestCase {
         XCTAssertNil(FeedIPAddress("[2001:4860:4860::8888]"))
     }
 
+    func testCanonicalLiteralRoundTripsForIPv4AndIPv6() {
+        XCTAssertEqual(FeedIPAddress("8.8.8.8")?.literal, "8.8.8.8")
+        XCTAssertEqual(FeedIPAddress("2001:4860:4860::8888")?.literal, "2001:4860:4860::8888")
+    }
+
     func testAcceptsOrdinaryGlobalUnicastAddresses() {
         for address in [
             "8.8.8.8",
