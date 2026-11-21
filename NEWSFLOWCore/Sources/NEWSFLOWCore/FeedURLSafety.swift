@@ -13,9 +13,13 @@ public enum FeedURLSafety {
               let rawHost = components.host,
               !rawHost.isEmpty,
               components.user == nil,
-              components.password == nil,
-              components.port == nil || components.port == 80 || components.port == 443
+              components.password == nil
         else {
+            return false
+        }
+
+        let expectedPort = scheme == "https" ? 443 : 80
+        guard components.port == nil || components.port == expectedPort else {
             return false
         }
 
