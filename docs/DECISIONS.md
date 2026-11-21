@@ -60,3 +60,14 @@ The next decision gate is to identify a supported Apple resolver approach that c
 See `docs/FEED_TRANSPORT_SPIKE.md` for the API evaluation, implementation inventory, verification boundary, TLS test-harness requirements and remaining acceptance criteria.
 
 ADR-008 remains proposed. Do not claim complete SSRF protection, replace the current feed transport or merge the hardening branch until the controlled TLS proof, DNS answer-set policy, redirect re-resolution, HTTP framing/bounded streaming, timeout and cancellation tests have passed.
+
+
+### DNS-over-HTTPS candidate evaluation — 2026-11-21
+
+RFC 8484 DoH provides a bounded HTTP exchange for each DNS wire query, making separate A and AAAA responses parseable and cancellable at the HTTP task level. It is technically viable as an application-managed resolver, but it does not preserve system DNS semantics automatically: a third-party resolver receives feed-hostname queries, may bypass VPN/split-DNS/filtering choices, and introduces endpoint bootstrap, provider availability, redirects, failover and DNS wire-parser requirements. Separate A and AAAA responses are not an atomic snapshot; CNAME handling, RCODE, truncation, TTL and DNSSEC semantics must be explicit.
+
+Apple's NetworkExtension DNS settings configure encrypted DNS at the system level after explicit user activation; the reviewed API documentation does not expose a per-query complete A+AAAA result set and cancellation contract to the app. This is not a direct implementation of `FeedAddressResolving`.
+
+**Decision:** Do not silently introduce a third-party DoH provider or make DoH the default. The architecture decision must explicitly choose between preserving system/VPN DNS behavior with a weaker guarantee that validates every address actually returned by the system resolver and connects only to a validated numeric endpoint, or an opt-in application-managed DoH mode with provider and privacy disclosure. Neither option is implemented yet. The existing URLSession feed transport remains unchanged and retains the documented SSRF/DNS-rebinding limitation.
+
+See `docs/FEED_TRANSPORT_SPIKE.md` for the detailed trade-offs and protocol requirements.
