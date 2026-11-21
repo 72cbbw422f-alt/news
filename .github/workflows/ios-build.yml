@@ -2,18 +2,18 @@ name: NEWSFLOW iOS Build
 
 on:
   push:
-    branches: [main, "foundation/**"]
+    branches: [main, "foundation/**", "security/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "foundation/**"]
   workflow_dispatch:
 
 concurrency:
-  group: ios-build-${{ github.ref }}
+  group: ios-build-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
   build-ios:
-    name: Xcode simulator build
+    name: Xcode simulator build and tests
     runs-on: macos-15
     steps:
       - name: Check out repository
@@ -43,3 +43,18 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+      - name: Run iOS unit tests
+        run: |
+          SIMULATOR_ID="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]; print(next((d["udid"] for runtime in devices.values() for d in runtime if d["isAvailable"] and d["name"].startswith("iPhone")), ""))')"
+          if [ -z "$SIMULATOR_ID" ]; then
+            echo "No available iPhone Simulator found"
+            exit 1
+          fi
+          xcodebuild \
+            -project NEWSFLOW.xcodeproj \
+            -scheme NEWSFLOW \
+            -configuration Debug \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_ID" \
+            CODE_SIGNING_ALLOWED=NO \
+            test

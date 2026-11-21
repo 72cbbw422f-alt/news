@@ -11,7 +11,7 @@ final class OPMLCodecTests: XCTestCase {
               xmlUrl="https://example.com/feed.xml"
               htmlUrl="https://example.com/"/>
           </outline>
-          <outline text="World" type="rss" xmlUrl="https://world.example/rss"/>
+          <outline text="World" type="rss" xmlUrl="https://world.example.org/rss"/>
         </body></opml>
         """
         let subscriptions = try OPMLCodec.parse(data: Data(xml.utf8))

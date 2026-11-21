@@ -16,6 +16,9 @@ targets:
     dependencies:
       - package: NEWSFLOWCore
         product: NEWSFLOWCore
+    scheme:
+      testTargets:
+        - NEWSFLOWAppTests
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.newsflow.ios
@@ -26,3 +29,19 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+  NEWSFLOWAppTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: NEWSFLOWAppTests
+    dependencies:
+      - target: NEWSFLOW
+    resources:
+      - path: NEWSFLOWAppTests/Fixtures
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.newsflow.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTED_PLATFORMS: "iphonesimulator"

@@ -17,6 +17,7 @@ public struct FeedHTTPClient: Sendable {
     public let maximumResponseBytes: Int
     public let timeout: TimeInterval
     public let maximumRedirects: Int
+    private let sessionConfiguration: FeedURLSessionConfiguration?
 
     public init(
         maximumResponseBytes: Int = 5 * 1_024 * 1_024,
@@ -26,6 +27,20 @@ public struct FeedHTTPClient: Sendable {
         self.maximumResponseBytes = max(1, maximumResponseBytes)
         self.timeout = max(1, timeout)
         self.maximumRedirects = max(0, maximumRedirects)
+        self.sessionConfiguration = nil
+    }
+
+    /// Internal injection point for deterministic transport tests.
+    init(
+        maximumResponseBytes: Int = 5 * 1_024 * 1_024,
+        timeout: TimeInterval = 20,
+        maximumRedirects: Int = 5,
+        sessionConfiguration: URLSessionConfiguration
+    ) {
+        self.maximumResponseBytes = max(1, maximumResponseBytes)
+        self.timeout = max(1, timeout)
+        self.maximumRedirects = max(0, maximumRedirects)
+        self.sessionConfiguration = FeedURLSessionConfiguration(sessionConfiguration)
     }
 
     public func fetch(_ url: URL) async throws -> Data {
@@ -48,9 +63,20 @@ public struct FeedHTTPClient: Sendable {
 
         let loader = BoundedFeedDownload(
             maximumBytes: maximumResponseBytes,
-            maximumRedirects: maximumRedirects
+            maximumRedirects: maximumRedirects,
+            sessionConfiguration: sessionConfiguration
         )
         return try await loader.download(request)
+    }
+}
+
+/// URLSessionConfiguration is reference-typed; this immutable wrapper permits
+/// safe injection into the Sendable client without exposing mutation.
+private final class FeedURLSessionConfiguration: @unchecked Sendable {
+    let value: URLSessionConfiguration
+
+    init(_ value: URLSessionConfiguration) {
+        self.value = value
     }
 }
 
@@ -59,25 +85,50 @@ public struct FeedHTTPClient: Sendable {
 private final class BoundedFeedDownload: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let maximumBytes: Int
     private let maximumRedirects: Int
+    private let sessionConfiguration: FeedURLSessionConfiguration?
+    private let stateLock = NSLock()
+    private var cancellationRequested = false
     private var redirectCount = 0
     private var continuation: CheckedContinuation<Data, Error>?
     private var session: URLSession?
+    private var dataTask: URLSessionDataTask?
     private var buffer = Data()
 
-    init(maximumBytes: Int, maximumRedirects: Int) {
+    init(
+        maximumBytes: Int,
+        maximumRedirects: Int,
+        sessionConfiguration: FeedURLSessionConfiguration?
+    ) {
         self.maximumBytes = maximumBytes
         self.maximumRedirects = maximumRedirects
+        self.sessionConfiguration = sessionConfiguration
     }
 
     func download(_ request: URLRequest) async throws -> Data {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
-            self.continuation = continuation
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.timeoutIntervalForRequest = request.timeoutInterval
-            configuration.timeoutIntervalForResource = request.timeoutInterval
-            let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
-            self.session = session
-            session.dataTask(with: request).resume()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
+                let configuration = sessionConfiguration?.value ?? URLSessionConfiguration.ephemeral
+                configuration.timeoutIntervalForRequest = request.timeoutInterval
+                configuration.timeoutIntervalForResource = request.timeoutInterval
+                let session = URLSession(configuration: configuration, delegate: self, delegateQueue: nil)
+                let dataTask = session.dataTask(with: request)
+
+                stateLock.lock()
+                self.continuation = continuation
+                self.session = session
+                self.dataTask = dataTask
+                let shouldCancel = cancellationRequested
+                stateLock.unlock()
+
+                if shouldCancel {
+                    dataTask.cancel()
+                    finish(.failure(CancellationError()))
+                } else {
+                    dataTask.resume()
+                }
+            }
+        } onCancel: {
+            cancel()
         }
     }
 
@@ -131,7 +182,11 @@ private final class BoundedFeedDownload: NSObject, URLSessionDataDelegate, @unch
             finish(.failure(FeedHTTPError.tooManyRedirects))
             return
         }
-        guard let destination = request.url, FeedSource.validatedHTTPURL(destination) else {
+        guard let sourceScheme = response.url?.scheme?.lowercased(),
+              let destination = request.url,
+              FeedSource.validatedHTTPURL(destination),
+              !(sourceScheme == "https" && destination.scheme?.lowercased() == "http")
+        else {
             completionHandler(nil)
             finish(.failure(FeedHTTPError.unsafeRedirect))
             return
@@ -151,9 +206,31 @@ private final class BoundedFeedDownload: NSObject, URLSessionDataDelegate, @unch
         }
     }
 
+    private func cancel() {
+        stateLock.lock()
+        cancellationRequested = true
+        let dataTask = self.dataTask
+        let hasContinuation = continuation != nil
+        stateLock.unlock()
+
+        dataTask?.cancel()
+        if hasContinuation {
+            finish(.failure(CancellationError()))
+        }
+    }
+
     private func finish(_ result: Result<Data, Error>) {
-        guard let continuation else { return }
+        stateLock.lock()
+        guard let continuation else {
+            stateLock.unlock()
+            return
+        }
         self.continuation = nil
+        let session = self.session
+        self.session = nil
+        self.dataTask = nil
+        stateLock.unlock()
+
         switch result {
         case .success(let data):
             continuation.resume(returning: data)

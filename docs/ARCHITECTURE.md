@@ -17,7 +17,6 @@ Data
   ├─ RSS/Atom parser
   ├─ Bounded HTTP feed client and refresh coordinator
   ├─ Persistence adapter (SwiftData)
-  ├─ OPML importer/exporter
   └─ Integration adapters (Podcast, YouTube, Bluesky, Reddit)
 ```
 
@@ -51,13 +50,16 @@ Read/saved state belongs to the user's local library, not the feed payload. Refr
 
 ## RSS ingestion pipeline
 1. Validate URL scheme (HTTP/HTTPS only).
-2. Fetch with bounded timeout and maximum response size.
-3. Parse RSS 2.0 or Atom with external entity resolution disabled.
-4. Normalize whitespace, dates, links and HTML fragments.
-5. Resolve stable identity: GUID/Atom ID, otherwise canonical URL, otherwise deterministic fallback.
-6. Deduplicate within source and merge updated metadata without overwriting user reading state.
-7. Persist transactionally.
-8. Record last attempt, last success and a user-readable error.
+2. Open a Network.framework connection using the original hostname.
+3. Wait for readiness, inspect the actual remote peer and reject private/local/reserved addresses before sending HTTP request bytes.
+4. For HTTPS, complete TLS using the original hostname and normal system trust before peer inspection. The TLS handshake may reach a disallowed peer; no HTTP request bytes may be sent before validation.
+5. Fetch with bounded timeouts, header limits, streaming response-size limits and redirect revalidation.
+6. Parse RSS 2.0 or Atom with external entity resolution disabled.
+7. Normalize whitespace, dates, links and HTML fragments.
+8. Resolve stable identity: GUID/Atom ID, otherwise canonical URL, otherwise deterministic fallback.
+9. Deduplicate within source and merge updated metadata without overwriting user reading state.
+10. Persist transactionally.
+11. Record last attempt, last success and a user-readable error.
 
 ## Reliability and security
 - Never execute feed HTML or scripts.
@@ -68,7 +70,11 @@ Read/saved state belongs to the user's local library, not the feed payload. Refr
 - Respect API terms, rate limits and user authorization for third-party services.
 - Background refresh is best-effort under iOS scheduling; manual refresh remains available.
 - Use cancellation and per-source concurrency limits to avoid runaway refreshes.
-- The initial transport enforces response size while streaming. Redirect destination validation remains a release-hardening task.
+- Feed and redirect URLs reject non-HTTP(S) schemes, embedded credentials, non-standard ports, local/reserved hostnames, IPv6 literals and non-public IPv4 literals.
+- The production transport must inspect the actual connected peer and validate it before sending HTTP bytes. HTTPS TLS handshake traffic can occur before that inspection; this limitation is explicit.
+- Redirects must establish a new connection and repeat peer validation. Never reuse a previously validated peer decision for a new hostname or redirect hop.
+- Do not fall back to URLSession after a peer-validation failure.
+- The current production URLSession feed client still resolves hostnames itself and does not expose a pre-request peer-validation hook. DNS rebinding/private-peer mitigation is therefore not yet active in production.
 
 ## Sync strategy
 Start local-first. Add CloudKit only after local persistence semantics are stable. Sync must define conflict resolution for read/saved state, source edits, deletions and duplicate merges. Users must be able to continue in local-only mode.
