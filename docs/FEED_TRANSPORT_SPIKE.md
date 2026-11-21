@@ -334,3 +334,24 @@ References:
 - Apple TN3151 — Choosing the right networking API: https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
 - Apple archived hostname resolution guidance (including getaddrinfo IPv6 cancellation behavior): https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/NetworkingTopics/Articles/ResolvingDNSHostnames.html
 - RFC 8305 — Happy Eyeballs v2: https://www.rfc-editor.org/rfc/rfc8305
+
+
+## Apple swift-async-dns-resolver package evaluation — 2026-11-21
+
+Evaluated Apple's `apple/swift-async-dns-resolver`, release **0.8.1** (tagged 2026-10-30; Apache-2.0). It supports separate `queryA(name:)` and `queryAAAA(name:)` calls and targets iOS 13+/macOS 10.15+. Its default implementation selects DNS-SD on Darwin and c-ares on non-Darwin platforms; the public API also allows explicitly constructing `CAresDNSResolver`.
+
+The source-level review found important limitations:
+
+- The Darwin DNS-SD implementation still uses `DNSServiceQueryRecord`, calls `DNSServiceProcessResult` once, then deallocates the service reference. This does not establish a documented complete multi-response A or AAAA answer set. It therefore does not resolve the DNS-SD completion concern recorded above.
+- The c-ares implementation has per-query cancellation tests and promptly resumes the awaiting task with `CancellationError`. However, its cancellation handler deliberately does **not** call `ares_cancel`, because that would cancel all requests sharing the channel and can deadlock against the poll loop. The underlying DNS request is left running until its callback or configured timeout, and its resources are released only when that callback arrives. This is caller cancellation, not active cancellation of the resolver operation.
+- The library exposes parsed A and AAAA records, but its high-level API performs separate queries. The adapter still needs a fail-closed policy for both families, empty results, CNAME behavior and inconsistent snapshots.
+- The package compiles bundled c-ares source and is Apache-2.0 licensed. Its dependency footprint and behavior on the exact iOS deployment target still need a project-level build and device/simulator check before any adoption.
+
+**Assessment:** promising source and API quality, but not a drop-in solution for ADR-008. The default Darwin backend does not provide the missing completion guarantee, while the c-ares backend does not stop the underlying DNS operation on cancellation. Do not integrate it as the production resolver under the current strict acceptance criteria. It remains a candidate only if the cancellation requirement is explicitly refined to mean prompt caller cancellation with bounded background resolver cleanup, and if A/AAAA completion and CNAME semantics are independently demonstrated.
+
+References:
+- Apple Swift Async DNS Resolver repository: https://github.com/apple/swift-async-dns-resolver
+- Release 0.8.1: https://github.com/apple/swift-async-dns-resolver/releases/tag/0.8.1
+- Darwin implementation: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Sources/AsyncDNSResolver/dnssd/DNSResolver_dnssd.swift
+- c-ares implementation: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Sources/AsyncDNSResolver/c-ares/DNSResolver_c-ares.swift
+- Per-query cancellation tests: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Tests/AsyncDNSResolverTests/c-ares/CAresCancellationTests.swift
