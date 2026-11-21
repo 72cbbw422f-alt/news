@@ -79,15 +79,30 @@ private final class FakeFeedConnectionController: FeedConnectionControlling {
     var stateHandler: ((FeedConnectionState) -> Void)?
     let connection: NWConnection? = nil
     private let nextState: FeedConnectionState
-    private(set) var startCount = 0
-    private(set) var cancelCount = 0
+    private let lock = NSLock()
+    private var starts = 0
+    private var cancels = 0
+
+    var startCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return starts
+    }
+
+    var cancelCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancels
+    }
 
     init(nextState: FeedConnectionState) {
         self.nextState = nextState
     }
 
     func start(on queue: DispatchQueue) {
-        startCount += 1
+        lock.lock()
+        starts += 1
+        lock.unlock()
         queue.async { [weak self] in
             guard let self else { return }
             self.stateHandler?(self.nextState)
@@ -95,7 +110,9 @@ private final class FakeFeedConnectionController: FeedConnectionControlling {
     }
 
     func cancel() {
-        cancelCount += 1
+        lock.lock()
+        cancels += 1
+        lock.unlock()
     }
 
     func validateConnectedPeer() throws {
