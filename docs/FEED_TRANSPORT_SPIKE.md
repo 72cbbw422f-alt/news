@@ -1,7 +1,7 @@
 # Feed transport hardening — implementation spike
 
 **Date:** 2026-11-20  
-**Status:** TLS integration harness and IP address policy verified in CI; DNS resolver/orchestration not implemented (2026-11-21)  
+**Status:** TLS integration harness, IP address policy, Core resolver orchestration and cancellation tests verified in CI; Apple DNS adapter remains blocked on a safe complete-answer API (2026-11-21)  
 **Branch:** security/feed-url-hardening
 
 ## Problem
@@ -109,7 +109,45 @@ Do not replace FeedHTTPClient or remove the existing URLSession implementation u
 
 ## Next implementation step
 
-The next implementation step is a cross-platform, injectable DNS resolver contract and fail-closed orchestration in NEWSFLOWCore. It must validate the complete A/AAAA answer set through `FeedIPAddressPolicy` before returning any connectable endpoint, propagate cancellation, and have deterministic fake-resolver tests. Then add an Apple-platform resolver adapter and prove that the selected numeric IP is used by the TLS connection factory. Keep the production feed transport unchanged until DNS, TLS, redirects, bounded HTTP framing, timeout and cancellation acceptance tests are all covered.
+The cross-platform, injectable resolver contract and fail-closed orchestration now exist in NEWSFLOWCore:
+- `FeedAddressResolving` requires the resolver to return the complete A/AAAA answer set and cooperate with task cancellation.
+- `FeedAddressResolutionService` validates the hostname, checks cancellation before and after resolution, and rejects the entire answer set unless every address passes `FeedIPAddressPolicy`.
+- Deterministic fake-resolver tests cover valid dual-stack answers, invalid hostnames, mixed public/private answers, empty and malformed answers, resolver failures and cancellation while the resolver is suspended.
+
+The next step is **not** to implement a speculative adapter. First establish an Apple-supported resolver API that provides a reliable completion boundary for the complete initial A and AAAA answer set and can be actively cancelled. Then prove the returned numeric IP is passed to `PinnedTLSConnectionFactory` without hostname re-resolution. Keep the production feed transport unchanged until DNS, TLS, redirects, bounded HTTP framing, timeout and cancellation acceptance tests are all covered.
+
+## Apple resolver API evaluation — 2026-11-21
+
+The initial candidate, `DNSServiceGetAddrInfo`, is asynchronous and supports IPv4, IPv6 or both. Its semantics do not currently satisfy the security requirement for a complete one-shot answer set:
+
+- Apple documents that the query remains active until the caller deallocates its `DNSServiceRef`.
+- `kDNSServiceFlagsMoreComing` only indicates that another result is already queued. When it is absent, no more results are queued *at that instant*; additional answers can arrive later. It is not a completion signal for both address families.
+- `kDNSServiceFlagsTimeout` stops the query after a system-determined interval and delivers `kDNSServiceErr_Timeout`, even if answers arrived earlier. That timeout callback cannot safely be treated as successful completion.
+- `DNSServiceRefDeallocate` does provide a cancellation mechanism, but cancellation alone does not solve the missing completion boundary.
+
+The alternative `CFHost` APIs expose asynchronous resolution and cancellation, but Apple's current documentation marks the CFHost API family deprecated. The POSIX `getaddrinfo` API is synchronous; Apple's archived guidance also notes that it may cancel outstanding IPv6 work shortly after receiving an IPv4 answer, so it cannot be assumed to return the complete A+AAAA set required here.
+
+**Decision for this spike:** do not ship a DNS-SD implementation that treats a quiet callback interval or `MoreComing == false` as completion. Do not use `CFHost` or a single `getaddrinfo` call as a substitute without resolving their documented limitations. Continue evaluating supported approaches; if no system API can meet the complete-answer and cancellation contract, revisit the transport/security architecture explicitly rather than weakening the requirement silently.
+
+References:
+- Apple `DNSServiceGetAddrInfo`: https://developer.apple.com/documentation/dnssd/dnsservicegetaddrinfo%28_%3A_%3A_%3A_%3A_%3A_%3A_%3A%29
+- Apple `kDNSServiceFlagsMoreComing`: https://developer.apple.com/documentation/dnssd/kdnsserviceflagsmorecoming
+- Apple `kDNSServiceFlagsTimeout`: https://developer.apple.com/documentation/dnssd/kdnsserviceflagstimeout
+- Apple `DNSServiceRefDeallocate`: https://developer.apple.com/documentation/dnssd/dnsservicerefdeallocate%28_%3A%29
+- Apple `CFHost` deprecation status: https://developer.apple.com/documentation/cfnetwork/cfhost
+- Apple TN3151 networking guidance: https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
+- Apple archived hostname resolution guidance: https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/NetworkingTopics/Articles/ResolvingDNSHostnames.html
+
+## Verified resolver orchestration and cancellation — 2026-11-21
+
+Commit `6acb11359342139ed1bd6d17cc403c5f911fad12` adds `testPropagatesCancellationWhileResolverIsSuspended` to `NEWSFLOWCore/Tests/NEWSFLOWCoreTests/FeedAddressResolutionTests.swift`. The test waits until the fake resolver has actually started, cancels the in-flight task, and verifies that cancellation reaches the awaiting caller as `CancellationError`.
+
+The commit passed the push CI workflows:
+- NEWSFLOW Core Tests: Linux and Apple Foundation jobs passed.
+- NEWSFLOW iOS Build: simulator build and XCTest job passed.
+- The corresponding pull-request Core jobs also passed. The pull-request iOS job was still running at the time of this documentation update; the successful push iOS run covers the same commit.
+
+This verifies the Core orchestration contract against a cancellation-aware fake. It does **not** verify a production Apple DNS resolver or prove that an OS resolver operation is cancelled. The production feed transport remains on URLSession and unchanged.
 
 
 ## Certificate fixture diagnosis and correction — 2026-11-20
