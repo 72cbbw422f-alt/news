@@ -99,3 +99,10 @@ References:
 ### Apple swift-async-dns-resolver evaluation — 2026-11-21
 
 Apple's `swift-async-dns-resolver` 0.8.1 exposes A and AAAA queries and supports iOS 13+, but source review shows it does not currently satisfy the strict resolver contract. Its default Darwin backend still uses DNS-SD, calls `DNSServiceProcessResult` once and deallocates the query; complete multi-response answer-set semantics are not established. Its c-ares backend promptly cancels the awaiting task, but intentionally leaves the underlying DNS request running until callback/timeout rather than cancelling the resolver operation. It is therefore not approved as a drop-in production resolver. Adoption would require an explicit relaxation of active cancellation and additional proof of A/AAAA and CNAME completeness. Full source review is recorded in `docs/FEED_TRANSPORT_SPIKE.md`.
+
+
+### Upstream c-ares backend readiness risk — 2026-11-21
+
+Apple's `swift-async-dns-resolver` latest release is 0.8.1. Upstream PR [#93](https://github.com/apple/swift-async-dns-resolver/pull/93) remains open and reports a Darwin TCP readiness defect in the c-ares polling loop: sockets are passed to `ares_process_fd` based on interest rather than OS readiness, which can cause in-progress TCP handshakes to be treated as connected and fail with a spurious connection-refused error. The proposed fix is not included in the latest release.
+
+This adds a release-quality concern to the previously identified limitations: DNS-SD answer completion remains unproven, c-ares task cancellation does not cancel the underlying request, and the released c-ares TCP path has an unresolved upstream issue. Do not adopt 0.8.1. Re-evaluate only after a fixed upstream release and successful NEWSFLOW-specific iOS tests; cancellation and answer-set semantics must still be addressed independently.
