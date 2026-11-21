@@ -1,7 +1,7 @@
 # Feed transport hardening — implementation spike
 
 **Date:** 2026-11-20  
-**Status:** Prototype history retained; production direction selected in ADR-008 — connect-by-name with peer validation before HTTP request bytes  
+**Status:** Historical prototype record. Production direction is selected in ADR-008 — connect-by-name with peer validation before HTTP request bytes. Earlier recommendations in this document that say to keep ADR-008 Proposed are superseded.  
 **Branch:** security/feed-url-hardening
 
 ## Problem
@@ -453,7 +453,7 @@ The system-resolver candidate retains one security advantage: if the app validat
 
 However, this does not meet ADR-008's current full-A+AAAA-RRset requirement. It also brings platform compatibility costs that Apple's current guidance explicitly warns about: VPN On Demand, Happy Eyeballs, IPv6-only operation, DNS64/NAT64, socket domain association and network reconfiguration handling.
 
-**Recommendation:** do not promote the two-family getaddrinfo candidate to production architecture at this stage. If it is prototyped, isolate it behind the existing resolver protocol and test on real iOS devices/networks, including VPN On Demand and IPv6-only DNS64/NAT64. A successful unit test or simulator build alone cannot verify those platform behaviors. Keep ADR-008 Proposed and keep the current URLSession transport unchanged until an explicit architecture decision is made.
+**Historical recommendation (superseded):** this paragraph predates the accepted ADR-008 decision. The getaddrinfo candidate remains an isolated experiment; the selected production direction is connect-by-name with connected-peer validation before HTTP request bytes. Real-device VPN, IPv6-only and DNS64/NAT64 testing remain release gates.
 
 References:
 - Apple TN3151 — Choosing the right networking API: https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
@@ -486,7 +486,7 @@ Encrypted DNS configuration is not a DNS answer API. Requiring DoH/DoT changes t
 
 `NetworkConnection` is the preferred Apple-native API to evaluate for a future custom application protocol where connect-by-name is acceptable. It is **not** a drop-in solution for ADR-008's strict destination-validation contract. The existing numeric-IP `NWConnection` TLS factory remains the only demonstrated preselected-numeric-endpoint TLS spike in this branch; it still has no production resolver or HTTP transport integration.
 
-**Recommendation:** do not replace the existing spike or current URLSession feed transport with `NetworkConnection` as an SSRF fix. Consider it only if the project explicitly chooses a different threat model that accepts system-managed endpoint selection, or use it for non-feed connections that do not require destination pinning. Keep ADR-008 Proposed.
+**Historical recommendation (superseded):** the later accepted ADR-008 explicitly selects Network.framework connect-by-name with connected-peer validation before HTTP request bytes. This remains an application-layer mitigation, not strict pre-connect blocking.
 
 References:
 - Apple WWDC25 — Use structured concurrency with Network framework: https://developer.apple.com/videos/play/wwdc2025/250/
