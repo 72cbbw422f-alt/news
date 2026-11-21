@@ -417,3 +417,46 @@ References:
 - Apple swift-async-dns-resolver 0.8.1 c-ares channel: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Sources/AsyncDNSResolver/c-ares/AresChannel.swift
 - Apple swift-async-dns-resolver 0.8.1 cancellation implementation: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Sources/AsyncDNSResolver/c-ares/DNSResolver_c-ares.swift
 - Apple swift-async-dns-resolver 0.8.1 cancellation tests: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Tests/AsyncDNSResolverTests/c-ares/CAresCancellationTests.swift
+
+
+## Follow-up: Apple system-resolver guidance and resolve-then-connect constraints — 2026-11-21
+
+A fresh review of Apple's current TN3151 and IPv6 compatibility guidance sharpens the system-resolver candidate assessment.
+
+### Apple platform guidance
+
+Apple's current TN3151 says to prefer connect-by-name APIs such as URLSession and Network framework in ordinary application networking. It explicitly calls the traditional two-step pattern (resolve a hostname, then connect to a returned address) an anti-pattern on Apple platforms because it does not support VPN On Demand and requires the application to implement Happy Eyeballs (RFC 8305) correctly. Apple notes that even a custom Happy Eyeballs implementation does not restore VPN On Demand compatibility for the BSD-socket approach.
+
+For BSD-socket applications, TN3151 recommends the system resolver (getaddrinfo / getnameinfo) and requires IPv4/IPv6 support. It also recommends associating outgoing sockets with their original DNS name using ne_socket_set_domains where applicable, and monitoring established socket viability across network reconfiguration. A custom pinned transport therefore assumes more platform responsibilities than DNS resolution and address validation alone.
+
+### Separate AF_INET and AF_INET6 calls
+
+The older Apple hostname-resolution guide documents that getaddrinfo is synchronous and that its implementation may cancel outstanding IPv6 lookup work shortly after a successful IPv4 response. It suggests an asynchronous resolver API when the application needs to continue receiving IPv6 results.
+
+Running separate AF_INET and AF_INET6 lookups may avoid that particular cross-family early-completion behavior, but this is an experiment, not a completeness guarantee:
+- The calls are independent and do not form an atomic DNS snapshot.
+- They still do not establish authoritative full RRset completeness or a shared DNS TTL boundary.
+- They remain synchronous and cannot be actively interrupted through Swift task cancellation.
+- The application still owns address ordering, connection racing, fallback and failure timing.
+- A cancelled caller must never initiate a connection when the resolver eventually returns.
+
+### NAT64/DNS64 implications
+
+Apple requires apps to work on IPv6-only networks and documents that DNS64/NAT64 can synthesize IPv6 addresses for IPv4-only destinations. It specifically warns against constructing synthesized addresses manually using the well-known prefix; synthesis must be performed through system APIs.
+
+This matters to a numeric-IP pinning design. A synthesized IPv6 candidate is not simply equivalent to an ordinary globally routed IPv6 origin address. The policy must distinguish the resolver-provided destination from assumptions about the translated IPv4 endpoint, and the transport must be tested on IPv6-only DNS64/NAT64 networks. A blanket classifier change to accept or reject synthesized addresses without an explicit threat-model decision would be unsafe.
+
+### Updated assessment
+
+The system-resolver candidate retains one security advantage: if the app validates each numeric candidate it actually receives and the connection is made only to that exact numeric endpoint, the feed transport cannot silently perform a second hostname lookup and connect to a different, unchecked address.
+
+However, this does not meet ADR-008's current full-A+AAAA-RRset requirement. It also brings platform compatibility costs that Apple's current guidance explicitly warns about: VPN On Demand, Happy Eyeballs, IPv6-only operation, DNS64/NAT64, socket domain association and network reconfiguration handling.
+
+**Recommendation:** do not promote the two-family getaddrinfo candidate to production architecture at this stage. If it is prototyped, isolate it behind the existing resolver protocol and test on real iOS devices/networks, including VPN On Demand and IPv6-only DNS64/NAT64. A successful unit test or simulator build alone cannot verify those platform behaviors. Keep ADR-008 Proposed and keep the current URLSession transport unchanged until an explicit architecture decision is made.
+
+References:
+- Apple TN3151 — Choosing the right networking API: https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
+- Apple archived Resolving DNS Hostnames guide: https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/NetworkingTopics/Articles/ResolvingDNSHostnames.html
+- Apple Supporting IPv6-only Networks: https://developer.apple.com/support/ipv6
+- Apple Supporting IPv6 DNS64/NAT64 Networks: https://developer.apple.com/library/archive/documentation/NetworkingInternetWeb/Conceptual/NetworkingOverview/UnderstandingandPreparingfortheIPv6Transition/UnderstandingandPreparingfortheIPv6Transition.html
+- RFC 8305 — Happy Eyeballs Version 2: https://www.rfc-editor.org/rfc/rfc8305
