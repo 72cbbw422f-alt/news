@@ -41,6 +41,28 @@ private final class RedirectingURLProtocol: URLProtocol {
 }
 
 
+private final class SuspendedURLProtocol: URLProtocol {
+    static var onStart: (() -> Void)?
+    static var onStop: (() -> Void)?
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "cancel.example.org"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        Self.onStart?()
+    }
+
+    override func stopLoading() {
+        Self.onStop?()
+    }
+}
+
+
 private final class RedirectChainURLProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.host == "chain.example.org"
@@ -174,6 +196,38 @@ final class FeedHTTPClientTests: XCTestCase {
         XCTAssertTrue(FeedURLSafety.isAllowed(URL(string: "https://news.example.org/feed")!))
     }
     #if !canImport(FoundationNetworking)
+    func testCancellingFetchCancelsUnderlyingURLSessionTask() async {
+        let started = expectation(description: "URL loading started")
+        let stopped = expectation(description: "URL loading stopped after cancellation")
+        SuspendedURLProtocol.onStart = { started.fulfill() }
+        SuspendedURLProtocol.onStop = { stopped.fulfill() }
+        defer {
+            SuspendedURLProtocol.onStart = nil
+            SuspendedURLProtocol.onStop = nil
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SuspendedURLProtocol.self]
+        let client = FeedHTTPClient(sessionConfiguration: configuration)
+        let fetchTask = Task {
+            try await client.fetch(URL(string: "https://cancel.example.org/feed.xml")!)
+        }
+
+        await fulfillment(of: [started], timeout: 2)
+        fetchTask.cancel()
+
+        do {
+            _ = try await fetchTask.value
+            XCTFail("Expected task cancellation")
+        } catch is CancellationError {
+            // Expected: caller cancellation reaches the download continuation.
+        } catch {
+            XCTFail("Unexpected error: \\(error)")
+        }
+
+        await fulfillment(of: [stopped], timeout: 2)
+    }
+
     func testActualHTTPRedirectToLoopbackIsRejectedBeforeFollowingIt() async {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [RedirectingURLProtocol.self]
