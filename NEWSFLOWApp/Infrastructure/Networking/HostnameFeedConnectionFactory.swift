@@ -40,9 +40,18 @@ enum HostnameFeedConnectionFactory {
             throw HostnameFeedConnectionFactoryError.unsupportedScheme
         }
 
-        guard url.port == nil || url.port == Int(defaultPort),
-              let port = NWEndpoint.Port(rawValue: url.port.map(UInt16.init) ?? defaultPort)
-        else {
+        let portValue: UInt16
+        if let explicitPort = url.port {
+            guard let parsedPort = UInt16(exactly: explicitPort),
+                  parsedPort == defaultPort
+            else {
+                throw HostnameFeedConnectionFactoryError.unsupportedPort
+            }
+            portValue = parsedPort
+        } else {
+            portValue = defaultPort
+        }
+        guard let port = NWEndpoint.Port(rawValue: portValue) else {
             throw HostnameFeedConnectionFactoryError.unsupportedPort
         }
 
