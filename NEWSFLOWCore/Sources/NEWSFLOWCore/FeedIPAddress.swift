@@ -116,6 +116,19 @@ public enum FeedIPAddressPolicy {
         case nonPublicAddress(String)
     }
 
+    /// Validates the actual remote peer of an established connection.
+    /// Unlike validateAnswerSet, this does not imply that DNS resolution
+    /// returned a complete A/AAAA answer set.
+    public static func validateConnectedPeer(_ literal: String) throws -> FeedIPAddress {
+        guard let address = FeedIPAddress(literal) else {
+            throw ValidationError.invalidAddress(literal)
+        }
+        guard address.isPublicUnicast else {
+            throw ValidationError.nonPublicAddress(literal)
+        }
+        return address
+    }
+
     public static func validateAnswerSet(_ literals: [String]) throws -> [FeedIPAddress] {
         guard !literals.isEmpty else {
             throw ValidationError.emptyAnswerSet
