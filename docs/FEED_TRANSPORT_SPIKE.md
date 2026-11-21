@@ -527,3 +527,9 @@ The new regression tests are awaiting CI on the branch head.
 The same URL review found that a single-label host such as `intranet` passed the URL-shape validator. On systems with DNS search domains, such a name may resolve to a local destination even though it is not written as an IP literal or an explicitly blocked suffix. The validator now requires at least two non-empty ASCII DNS labels, rejects leading/trailing dots and repeated dots rather than normalizing them, and enforces the 253-byte hostname limit. Regression cases cover single-label names and malformed dot placement.
 
 This is still URL syntax validation only. A multi-label public-looking hostname can resolve to a private address; the DNS resolution and destination-pinning gap remains.
+
+## HTTPS redirect downgrade protection — 2026-11-21
+
+The current URLSession redirect delegate now rejects a redirect whose source URL uses HTTPS and whose destination uses HTTP. This prevents a secure feed request from silently continuing over cleartext transport. HTTP-to-HTTPS redirects remain allowed, and ordinary HTTP feed subscriptions remain supported. The existing redirect count and destination URL-shape validation continue to apply.
+
+An Apple-platform URLProtocol regression test simulates an HTTPS 302 response with an HTTP Location and expects `FeedHTTPError.unsafeRedirect`. This is a transport-integrity improvement only; it does not resolve DNS names, pin destinations, or close the documented SSRF gap. Redirect destinations still require full DNS resolution and numeric endpoint pinning before production transport can be considered hardened.
