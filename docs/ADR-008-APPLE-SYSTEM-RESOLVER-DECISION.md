@@ -32,10 +32,10 @@ A cancelled lookup must never lead to a connection. The synchronous system resol
 
 ## Implementation sequence
 
-1. Implement the Apple system-resolver adapter behind `FeedAddressResolving`.
-2. Verify cancellation returns promptly and that late resolver results cannot start a connection.
-3. Wire the validated numeric candidates into the pinned TLS connection factory.
-4. Implement bounded HTTP/1.1 framing, streaming, redirects and per-hop re-resolution.
+1. Verify the Apple system-resolver adapter and pinned-connection bridge in CI, including cancellation and mixed-address rejection.
+2. Implement a bounded HTTP/1.1 transport over the prepared numeric TLS connections.
+3. Add redirect handling that repeats system resolution, candidate validation and numeric pinning for every hop.
+4. Implement address racing/fallback without hostname re-resolution, and prove connection cancellation closes every active attempt.
 5. Test IPv4, IPv6, IPv6-only, DNS64/NAT64, VPN On Demand, DNS failures, cancellation and network changes on real Apple devices.
 6. Keep the current URLSession feed path until all transport acceptance gates pass.
 
@@ -43,7 +43,7 @@ A cancelled lookup must never lead to a connection. The synchronous system resol
 
 - Core resolver orchestration and conservative candidate-set validation exist and have CI coverage.
 - The numeric-IP TLS factory and controlled TLS integration tests exist and have passed iOS Simulator CI.
-- The Apple resolver adapter has been introduced as an implementation prototype; it is not yet verified by CI.
+- The Apple resolver adapter and `PinnedFeedConnectionFactory` now bridge the configured system resolver through Core candidate validation into numeric-IP TLS connection preparation. The new bridge and canonical IP serialization are awaiting CI verification.
 - Production FeedHTTPClient remains on URLSession.
 - DNS rebinding/SSRF risk is not yet closed in production.
 - No signed IPA or physical-device verification is included.
