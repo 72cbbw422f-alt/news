@@ -1,7 +1,7 @@
 # Feed transport hardening — implementation spike
 
 **Date:** 2026-11-20  
-**Status:** TLS integration harness, IP address policy, Core resolver orchestration and cancellation tests verified in CI; Apple DNS adapter remains blocked on a safe complete-answer API (2026-11-21)  
+**Status:** Apple system-resolver adapter introduced; Core policy and TLS prototype previously verified in CI. New adapter CI verification pending (2026-11-21)  
 **Branch:** security/feed-url-hardening
 
 ## Problem
@@ -61,7 +61,7 @@ The local `NWListener` fixture uses a test-only CA and identity. Trust evaluatio
 ## Candidate transport direction
 
 1. Resolve the feed hostname immediately before connecting.
-2. Validate the complete A and AAAA answer set. Reject the entire set if any address is non-public or special-purpose.
+2. Validate every numeric candidate returned by Apple's system resolver. Reject the entire returned candidate set if any address is non-public or special-purpose. Do not claim authoritative A+AAAA completeness.
 3. Select one validated address and construct a numeric IPv4/IPv6 endpoint. Do not pass the original DNS hostname as the network endpoint.
 4. Configure TLS server name to the original URL hostname. Keep normal system trust evaluation enabled.
 5. Establish the connection and assert in integration tests that the remote peer is the selected numeric address.
@@ -107,14 +107,15 @@ Do not replace FeedHTTPClient or remove the existing URLSession implementation u
 - Apple: Creating an Identity for Local Network TLS — https://developer.apple.com/documentation/network/creating-an-identity-for-local-network-tls
 - Apple: Choosing the right networking API (TN3151) — https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
 
-## Next implementation step
+## Current implementation step — Apple system resolver
 
-The cross-platform, injectable resolver contract and fail-closed orchestration now exist in NEWSFLOWCore:
-- `FeedAddressResolving` requires the resolver to return the complete A/AAAA answer set and cooperate with task cancellation.
-- `FeedAddressResolutionService` validates the hostname, checks cancellation before and after resolution, and rejects the entire answer set unless every address passes `FeedIPAddressPolicy`.
-- Deterministic fake-resolver tests cover valid dual-stack answers, invalid hostnames, mixed public/private answers, empty and malformed answers, resolver failures and cancellation while the resolver is suspended.
+ADR-008 now selects Apple's configured system resolver. NEWSFLOW will not silently use a third-party DoH provider or bypass the device's VPN, managed DNS or custom DNS configuration.
 
-The next step is **not** to implement a speculative adapter. First establish an Apple-supported resolver API that provides a reliable completion boundary for the complete initial A and AAAA answer set and can be actively cancelled. Then prove the returned numeric IP is passed to `PinnedTLSConnectionFactory` without hostname re-resolution. Keep the production feed transport unchanged until DNS, TLS, redirects, bounded HTTP framing, timeout and cancellation acceptance tests are all covered.
+`AppleSystemFeedAddressResolver` uses separate `getaddrinfo` calls for IPv4 and IPv6 and returns every numeric candidate received. This is not an authoritative complete A+AAAA RRset API. The async adapter cancels its awaiting caller promptly and discards late results; an already-running synchronous `getaddrinfo` operation itself cannot be interrupted. The worker queue is bounded to limit outstanding resolver operations.
+
+`FeedAddressResolutionService` checks cancellation before and after resolution and validates every returned candidate through `FeedIPAddressPolicy`. The connection layer must check cancellation before connecting and use only a validated numeric endpoint. It must never re-resolve the original hostname.
+
+The adapter and updated Core contract are awaiting CI verification. Production FeedHTTPClient remains unchanged until the resolver, pinned TLS, HTTP framing, redirects, timeouts, cancellation and Apple network-compatibility acceptance tests pass.
 
 ## Apple resolver API evaluation — 2026-11-21
 
