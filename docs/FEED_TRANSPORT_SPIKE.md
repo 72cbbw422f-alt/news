@@ -460,3 +460,37 @@ References:
 - Apple Supporting IPv6-only Networks: https://developer.apple.com/support/ipv6
 - Apple Supporting IPv6 DNS64/NAT64 Networks: https://developer.apple.com/library/archive/documentation/NetworkingInternetWeb/Conceptual/NetworkingOverview/UnderstandingandPreparingfortheIPv6Transition/UnderstandingandPreparingfortheIPv6Transition.html
 - RFC 8305 — Happy Eyeballs Version 2: https://www.rfc-editor.org/rfc/rfc8305
+
+
+## Follow-up: Network framework Swift APIs introduced in iOS 26 — 2026-11-21
+
+Apple's WWDC25 session and current Network framework documentation identify a newer Swift API family: `NetworkConnection`, `NetworkListener` and `NetworkBrowser`, available on iOS/iPadOS/macOS 26. `NetworkConnection` is built around structured concurrency and automatically cancels with its owning task. It retains Network framework's connect-by-name behavior, Happy Eyeballs, TLS integration, proxy support and network-interface mobility.
+
+### What this improves
+
+- It is a better modern Swift API surface than callback-oriented `NWConnection` for a future custom transport, if the app's minimum OS target permits iOS 26-only code or a separately maintained compatibility path.
+- Task cancellation and connection lifetime are integrated with structured concurrency.
+- The system continues to own hostname resolution, address selection/racing, proxies and path changes.
+- `NWParameters.PrivacyContext` can require encrypted name resolution and optionally specify a DNS-over-HTTPS or DNS-over-TLS fallback resolver. iCloud Private Relay may take precedence over the fallback resolver.
+
+### Why it does not close the SSRF gap
+
+The new API is still connect-by-name: starting a connection evaluates the path, performs resolution and establishes the connection. It does not expose a pre-connect callback in which NEWSFLOW can inspect and reject every resolved A/AAAA destination before a TCP/TLS attempt. Its endpoint retry behavior (`tryNextEndpoint`) is connection selection, not a security validation hook.
+
+Network.framework also exposes establishment/resolution reporting, including the preferred/successful endpoint and the number of resolved endpoints. However, the report is requested once the connection is ready. For a TLS stack, ready follows connection establishment and protocol handshakes. This is useful for diagnostics and telemetry, but too late to enforce a pre-connect private-address block: the candidate has already received connection/handshake traffic. Inspecting the remote endpoint after ready does not retroactively prevent SSRF.
+
+Encrypted DNS configuration is not a DNS answer API. Requiring DoH/DoT changes the transport used for name resolution, but the app still does not receive the complete answer set to validate before connecting. It therefore does not replace the explicit DoH wire-query approach described earlier.
+
+### Assessment
+
+`NetworkConnection` is the preferred Apple-native API to evaluate for a future custom application protocol where connect-by-name is acceptable. It is **not** a drop-in solution for ADR-008's strict destination-validation contract. The existing numeric-IP `NWConnection` TLS factory remains the only demonstrated preselected-numeric-endpoint TLS spike in this branch; it still has no production resolver or HTTP transport integration.
+
+**Recommendation:** do not replace the existing spike or current URLSession feed transport with `NetworkConnection` as an SSRF fix. Consider it only if the project explicitly chooses a different threat model that accepts system-managed endpoint selection, or use it for non-feed connections that do not require destination pinning. Keep ADR-008 Proposed.
+
+References:
+- Apple WWDC25 — Use structured concurrency with Network framework: https://developer.apple.com/videos/play/wwdc2025/250/
+- Apple NetworkConnection documentation: https://developer.apple.com/documentation/network/networkconnection
+- Apple TN3151 — Choosing the right networking API: https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
+- Apple NWParameters.PrivacyContext: https://developer.apple.com/documentation/network/nwparameters/privacycontext
+- Apple requireEncryptedNameResolution: https://developer.apple.com/documentation/network/nwparameters/privacycontext/requireencryptednameresolution(_:fallbackresolver:)
+- Apple Network establishment reports: https://developer.apple.com/documentation/network/network-functions
