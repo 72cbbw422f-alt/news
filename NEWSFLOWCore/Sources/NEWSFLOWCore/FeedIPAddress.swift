@@ -34,6 +34,25 @@ public enum FeedIPAddress: Hashable, Sendable {
         return nil
     }
 
+    /// Canonical numeric representation suitable for a pinned network endpoint.
+    public var literal: String {
+        switch self {
+        case .ipv4(let bytes):
+            return bytes.map(String.init).joined(separator: ".")
+        case .ipv6(let bytes):
+            guard bytes.count == 16 else { return "" }
+            var address = in6_addr()
+            withUnsafeMutableBytes(of: &address) { destination in
+                destination.copyBytes(from: bytes)
+            }
+            var buffer = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+            guard inet_ntop(AF_INET6, &address, &buffer, socklen_t(buffer.count)) != nil else {
+                return ""
+            }
+            return String(cString: buffer)
+        }
+    }
+
     /// True only for ordinary globally routable unicast destinations.
     /// Special-purpose and transition ranges are rejected conservatively.
     public var isPublicUnicast: Bool {
