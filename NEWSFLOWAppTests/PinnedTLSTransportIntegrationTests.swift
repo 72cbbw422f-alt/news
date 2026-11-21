@@ -32,8 +32,9 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
     ) throws {
         let fixture = try TLSFixture.load()
         let server = try TLSLoopbackServer(identity: fixture.identity, queue: queue)
+        defer { server.stop() }
 
-        let listenerReady = expectation(description: "TLS listener ready")
+        let listenerReady = expectation(description: "TLS listener startup completed")
         let serverObservedSNI = succeeds
             ? expectation(description: "Server observed TLS SNI")
             : nil
@@ -44,9 +45,14 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
         var observedRemoteHost: NWEndpoint.Host?
         var clientFailure: NWError?
         var listenerPort: NWEndpoint.Port?
+        var listenerStartupError: NWError?
 
         server.onReady = { port in
             listenerPort = port
+            listenerReady.fulfill()
+        }
+        server.onFailure = { error in
+            listenerStartupError = error
             listenerReady.fulfill()
         }
         server.onSNI = { name in
@@ -55,8 +61,14 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
         }
 
         server.start()
-        wait(for: [listenerReady], timeout: 5)
-        let port = try XCTUnwrap(listenerPort)
+        wait(for: [listenerReady], timeout: 8)
+        guard let port = listenerPort else {
+            throw listenerStartupError ?? NSError(
+                domain: "NEWSFLOW.TLSFixture",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "TLS listener did not become ready"]
+            )
+        }
 
         let pinnedAddress = try XCTUnwrap(PinnedIPAddress(literal: "127.0.0.1"))
         let connection = try PinnedTLSConnectionFactory.makeConnectionForTesting(
@@ -143,7 +155,6 @@ final class PinnedTLSTransportIntegrationTests: XCTestCase {
         }
         connection.cancel()
         wait(for: [clientCancelled], timeout: 3)
-        server.stop()
     }
 
     private static func host(from endpoint: NWEndpoint) -> NWEndpoint.Host? {
@@ -193,6 +204,7 @@ private final class TLSLoopbackServer {
     private let listener: NWListener
     private let queue: DispatchQueue
     var onReady: ((NWEndpoint.Port) -> Void)?
+    var onFailure: ((NWError) -> Void)?
     var onSNI: ((String) -> Void)?
 
     init(identity: SecIdentity, queue: DispatchQueue) throws {
@@ -222,8 +234,17 @@ private final class TLSLoopbackServer {
 
     func start() {
         listener.stateUpdateHandler = { [weak self] state in
-            guard case .ready = state, let port = self?.listener.port else { return }
-            self?.onReady?(port)
+            guard let self else { return }
+            switch state {
+            case .ready:
+                if let port = self.listener.port {
+                    self.onReady?(port)
+                }
+            case .failed(let error):
+                self.onFailure?(error)
+            default:
+                break
+            }
         }
         listener.start(queue: queue)
     }
