@@ -520,3 +520,10 @@ Files changed:
 - `NEWSFLOWCore/Tests/NEWSFLOWCoreTests/FeedHTTPClientTests.swift`
 
 The new regression tests are awaiting CI on the branch head.
+
+
+### Follow-up: local single-label hostname validation — 2026-11-21
+
+The same URL review found that a single-label host such as `intranet` passed the URL-shape validator. On systems with DNS search domains, such a name may resolve to a local destination even though it is not written as an IP literal or an explicitly blocked suffix. The validator now requires at least two non-empty ASCII DNS labels, rejects leading/trailing dots and repeated dots rather than normalizing them, and enforces the 253-byte hostname limit. Regression cases cover single-label names and malformed dot placement.
+
+This is still URL syntax validation only. A multi-label public-looking hostname can resolve to a private address; the DNS resolution and destination-pinning gap remains.
