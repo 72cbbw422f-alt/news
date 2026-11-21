@@ -375,3 +375,45 @@ References:
 - Latest release: https://github.com/apple/swift-async-dns-resolver/releases/latest
 - Upstream PR #93: https://github.com/apple/swift-async-dns-resolver/pull/93
 - c-ares backend implementation at 0.8.1: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Sources/AsyncDNSResolver/c-ares/DNSResolver_c-ares.swift
+
+
+## Follow-up: c-ares cancellation and system resolver trade-off — 2026-11-21
+
+A deeper source review of Apple `swift-async-dns-resolver` 0.8.1 confirms the cancellation boundary:
+
+- `CAresDNSResolver` uses one shared c-ares channel and a polling task. `AresChannel.withChannel` serializes calls into c-ares with an `NSLock`.
+- Its task cancellation handler calls `QueryReplyHandler.cancel()`, which resumes the Swift continuation with `CancellationError`; it intentionally does not call `ares_cancel`.
+- The source explicitly states that the c-ares request remains active until its callback or configured timeout. The callback later releases its per-query context.
+- The package's own cancellation tests verify prompt caller cancellation, isolation between parallel queries, and eventual cleanup after timeout. They do not prove immediate cancellation of the DNS network request.
+- Calling `ares_cancel` from the current cancellation handler is not a safe patch: the package maintainers explicitly document lock/poll-loop deadlock and cross-query cancellation concerns. A fork would need a redesigned serialized event-loop/cancellation model, not a one-line call.
+
+A dedicated c-ares channel per DNS operation could avoid cross-query cancellation of unrelated requests, but it does **not** by itself solve the poll-loop synchronization/deadlock issue. This is a research direction, not an approved implementation.
+
+### System getaddrinfo: security guarantee versus complete RRset
+
+Apple's archived iOS networking guidance states that `getaddrinfo` is synchronous and that its implementation may cancel outstanding IPv6 lookup work shortly after receiving a successful IPv4 answer. Therefore it cannot be treated as a complete A+AAAA RRset API. Apple's current TN3151 recommends using the system resolver and warns that manually resolving then connecting is generally an anti-pattern because it complicates VPN On Demand and Happy Eyeballs.
+
+There is nevertheless a distinct security model worth evaluating: accept only the numeric addresses actually returned by the system resolver, validate **every returned candidate**, and connect only to a selected validated numeric endpoint with the existing pinned TLS factory. Under this model, an address omitted by the system resolver is never used as a destination; DNS rebinding cannot change the already selected numeric endpoint. This can provide a meaningful SSRF destination guarantee without claiming a complete DNS RRset. It does not satisfy the current stricter ADR requirement to reject a hostname if any unreturned record in its full A/AAAA RRset is non-public.
+
+Remaining caveats before even a prototype:
+- `getaddrinfo` is synchronous and has no per-request cancellation API; dispatching it off the caller task only cancels the wait, not the resolver work.
+- Apple explicitly warns that resolution-then-connect can interfere with VPN On Demand and requires a correct Happy Eyeballs strategy. A pinned-IP client would need its own address racing/fallback behavior and must preserve the relevant system network semantics.
+- NAT64/DNS64 and interface-specific address synthesis must be tested; do not classify synthesized IPv6 endpoints as ordinary public IPv6 without understanding the translation path.
+- The implementation must validate all candidates returned by the resolver and must never fall back to the original hostname in URLSession or NWConnection.
+- This is a proposed change to the security contract, not an implementation detail. It requires an explicit ADR decision before code.
+
+### Updated decision framing
+
+There are now three materially different choices:
+1. **Strict full RRset + active cancellation:** DoH or a purpose-built resolver/event-loop implementation. Strongest policy, higher privacy and maintenance cost.
+2. **System resolver + validate every returned numeric candidate:** preserves system resolver choice better, but relaxes full-RRset completeness and has synchronous/non-cancellable resolution plus VPN/Happy-Eyeballs concerns.
+3. **Apple DNS-SD / current async wrapper:** not accepted because completion is not reliable for the complete answer set.
+
+No code or production transport was changed during this follow-up.
+
+References:
+- Apple archived iOS DNS resolution guidance: https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/NetworkingTopics/Articles/ResolvingDNSHostnames.html
+- Apple TN3151: https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
+- Apple swift-async-dns-resolver 0.8.1 c-ares channel: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Sources/AsyncDNSResolver/c-ares/AresChannel.swift
+- Apple swift-async-dns-resolver 0.8.1 cancellation implementation: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Sources/AsyncDNSResolver/c-ares/DNSResolver_c-ares.swift
+- Apple swift-async-dns-resolver 0.8.1 cancellation tests: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Tests/AsyncDNSResolverTests/c-ares/CAresCancellationTests.swift
