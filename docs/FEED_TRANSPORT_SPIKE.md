@@ -503,3 +503,20 @@ A potentially useful hybrid deserves separate verification: construct the new `N
 The public WWDC25 examples establish connect-by-name, TLS protocol builders and connection cancellation, but do not demonstrate a TLS server-name override for a numeric endpoint. Apple's lower-level `sec_protocol_options_set_tls_server_name` explicitly overrides the name used for peer-certificate verification, and the current `NWConnection` factory uses it. The new Swift builder's documented examples expose TLS modifiers such as peer authentication, identity and certificate validation, but the reviewed public material does not establish an equivalent server-name modifier or a supported way to obtain its underlying `sec_protocol_options_t`.
 
 Do not infer that a numeric endpoint automatically preserves the original hostname for SNI or hostname verification. Nor should a custom certificate validator be treated as equivalent without proving both SNI behavior and normal system trust/hostname validation. A small iOS 26-only compile-and-loopback experiment could answer this, but it is not necessary to proceed with the current proven `NWConnection` TLS spike and must not be used as a production replacement until it passes the same positive and negative TLS tests.
+
+
+## URL policy consistency review — 2026-11-21
+
+A review of the production URL validator found that its IPv4 literal classifier had drifted from the newer shared `FeedIPAddressPolicy`: several selected special-purpose IPv4 ranges were rejected by resolver-answer validation but not by direct feed URL validation. The URL validator now delegates parsed numeric IPv4 literals to `FeedIPAddress.isPublicUnicast`, so both paths share one classification policy. Regression coverage was added for the additional ranges.
+
+The review also found that the URL validator previously accepted either port 80 or 443 regardless of scheme. It now accepts only the default port for the selected scheme (HTTP/80 or HTTPS/443), or an omitted port. Regression tests cover HTTPS on port 80 and HTTP on port 443.
+
+This aligns literal URL validation with the existing conservative IP policy; it does not resolve hostnames, close DNS rebinding, or complete the production SSRF mitigation.
+
+A separate lifecycle item remains for the next review: `FeedHTTPClient` currently bridges URLSession completion through a checked continuation. Cancellation propagation from the calling Swift task to the active URLSession task must be audited and tested before the custom transport's cancellation acceptance criteria can be considered complete.
+
+Files changed:
+- `NEWSFLOWCore/Sources/NEWSFLOWCore/FeedURLSafety.swift`
+- `NEWSFLOWCore/Tests/NEWSFLOWCoreTests/FeedHTTPClientTests.swift`
+
+The new regression tests are awaiting CI on the branch head.
