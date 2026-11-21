@@ -63,6 +63,43 @@ private final class SuspendedURLProtocol: URLProtocol {
 }
 
 
+
+private final class HTTPSDowngradeURLProtocol: URLProtocol {
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.host == "downgrade.example.org"
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        guard let url = request.url,
+              let response = HTTPURLResponse(
+                url: url,
+                statusCode: 302,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Location": "http://downgrade.example.org/insecure"]
+              )
+        else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+
+        let redirectedRequest = URLRequest(
+            url: URL(string: "http://downgrade.example.org/insecure")!
+        )
+        client?.urlProtocol(
+            self,
+            wasRedirectedTo: redirectedRequest,
+            redirectResponse: response
+        )
+    }
+
+    override func stopLoading() {}
+}
+
+
 private final class RedirectChainURLProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.host == "chain.example.org"
@@ -226,6 +263,22 @@ final class FeedHTTPClientTests: XCTestCase {
         }
 
         await fulfillment(of: [stopped], timeout: 2)
+    }
+
+
+    func testHTTPSRedirectToHTTPIsRejectedBeforeFollowingIt() async {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [HTTPSDowngradeURLProtocol.self]
+        let client = FeedHTTPClient(sessionConfiguration: configuration)
+
+        do {
+            _ = try await client.fetch(URL(string: "https://downgrade.example.org/feed.xml")!)
+            XCTFail("Expected HTTPS downgrade redirect error")
+        } catch let error as FeedHTTPError {
+            XCTAssertEqual(error, .unsafeRedirect)
+        } catch {
+            XCTFail("Unexpected error: \\(error)")
+        }
     }
 
     func testActualHTTPRedirectToLoopbackIsRejectedBeforeFollowingIt() async {
