@@ -235,3 +235,41 @@ The current branch head passed all relevant CI jobs:
 The policy implementation is now CI-verified, but it remains a policy primitive rather than a resolver. No DNS query, cancellation-aware resolution, endpoint orchestration, redirect re-resolution or production transport integration exists yet. The IPv4/IPv6 classification remains intentionally conservative and must be reviewed against the current IANA special-purpose registries before production use; it should not be described as a complete registry-derived policy.
 
 Current verified head: `62c827decd994063cf9cfe49c56998caef5fd07a`. PR #2 remains open and Draft; no merge and no IPA build have occurred.
+
+
+## DNS-over-HTTPS resolver candidate evaluation — 2026-11-21
+
+DNS-over-HTTPS (DoH, RFC 8484) is the strongest candidate identified so far for obtaining bounded DNS message responses without treating DNS-SD callback batching as completion.
+
+### What DoH solves
+
+- RFC 8484 maps each DNS query/response pair to one HTTP exchange and defines the `application/dns-message` wire format.
+- A resolver adapter can issue explicit IN/A and IN/AAAA queries, await each bounded HTTPS response, parse the DNS message, and combine the returned address records for fail-closed policy validation.
+- This creates a protocol-level response boundary for each query and supports ordinary task cancellation of the HTTPS operations.
+- The returned numeric addresses can then feed the existing `FeedAddressResolutionService` and `PinnedTLSConnectionFactory` path. The feed connection itself must still use numeric IP pinning; DoH does not justify handing the original feed hostname to URLSession.
+
+### What DoH does not solve automatically
+
+- Two separate A and AAAA queries are not an atomic DNS snapshot. Records may change between queries, and recursive resolvers may return cached answers with different remaining TTLs. The implementation must treat the combined set conservatively and never claim authoritative completeness beyond the resolver responses received.
+- CNAME processing, answer-section parsing, RCODE handling, truncation/TC behavior, EDNS options, TTLs, DNSSEC validation semantics and malformed/compressed-name handling all require a real bounded DNS wire parser and explicit tests. A successful HTTP 200 alone is not a successful DNS answer.
+- The resolver provider receives the feed hostname queries. This is a privacy and third-party dependency decision, not merely a transport implementation detail.
+- A DoH endpoint hostname itself needs a safe bootstrap strategy. Resolving that endpoint through the same untrusted resolver path creates a bootstrap loop; hard-coded IPs create maintenance and certificate-validation concerns. Endpoint selection, TLS hostname verification, redirects and failover must be explicit.
+- Silent fallback to system DNS or another resolver would make the security behavior unpredictable and is not acceptable.
+- DoH may bypass user-selected system DNS, VPN split-DNS, parental/content filters, enterprise DNS policy or local network naming. The app must not assume that this is an acceptable user-visible behavior.
+
+### Apple system DNS settings are not an app-level answer API
+
+Apple documents NetworkExtension DNS settings that can configure system-wide DNS-over-HTTPS or DNS-over-TLS, with the user explicitly enabling the configuration. This is a device DNS configuration mechanism, not a documented per-query API returning a complete A+AAAA RRset to NEWSFLOW with task cancellation. It therefore does not directly satisfy the resolver protocol contract.
+
+### Options and current recommendation
+
+1. **System resolver with numeric destination pinning:** best alignment with user network configuration, but Apple's documented APIs reviewed so far do not provide the required complete dual-stack answer boundary and cancellation semantics. A deliberately weaker policy could validate every address actually returned by a system lookup and connect only to a validated numeric address, but that would change the current whole-answer-set requirement and needs an explicit ADR decision.
+2. **Application-managed DoH:** technically feasible as a separate, opt-in resolver mode with a named provider, clear privacy disclosure, fixed endpoint policy, no redirects/fallback, full DNS parser and comprehensive tests. It bypasses system DNS behavior and adds a provider dependency; do not make it the default without product approval.
+3. **Network.framework hostname connection followed by peer inspection:** remains a weaker alternative because TLS handshake traffic precedes peer validation; not approved under the current pre-connect requirement.
+
+**Decision for this spike:** Do not implement DoH as the default resolver and do not add a third-party DNS provider silently. The next architecture decision must choose whether NEWSFLOW prioritizes (a) preserving system/VPN DNS behavior with a documented weaker guarantee based on validating every actual returned destination, or (b) an explicit opt-in DoH resolver with provider/privacy implications. Until that decision is made, keep the production URLSession transport unchanged and retain the documented SSRF/DNS-rebinding limitation.
+
+References:
+- RFC 8484 — DNS Queries over HTTPS: https://www.rfc-editor.org/rfc/rfc8484
+- Apple NetworkExtension DNS Settings: https://developer.apple.com/documentation/networkextension/dns-settings
+- Apple NEDNSOverHTTPSSettings: https://developer.apple.com/documentation/networkextension/nednsoverhttpssettings
