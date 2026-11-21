@@ -94,3 +94,8 @@ References:
 - Apple TN3151: https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
 - Apple archived hostname resolution guidance: https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/NetworkingTopics/Articles/ResolvingDNSHostnames.html
 - RFC 8305: https://www.rfc-editor.org/rfc/rfc8305
+
+
+### Apple swift-async-dns-resolver evaluation — 2026-11-21
+
+Apple's `swift-async-dns-resolver` 0.8.1 exposes A and AAAA queries and supports iOS 13+, but source review shows it does not currently satisfy the strict resolver contract. Its default Darwin backend still uses DNS-SD, calls `DNSServiceProcessResult` once and deallocates the query; complete multi-response answer-set semantics are not established. Its c-ares backend promptly cancels the awaiting task, but intentionally leaves the underlying DNS request running until callback/timeout rather than cancelling the resolver operation. It is therefore not approved as a drop-in production resolver. Adoption would require an explicit relaxation of active cancellation and additional proof of A/AAAA and CNAME completeness. Full source review is recorded in `docs/FEED_TRANSPORT_SPIKE.md`.
