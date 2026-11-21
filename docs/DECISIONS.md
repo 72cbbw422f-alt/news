@@ -80,3 +80,17 @@ DoH (RFC 8484) is the strongest resolver candidate identified so far because eac
 DoH does not create an atomic A+AAAA snapshot, and it changes the privacy/trust model: feed hostnames are disclosed to a third-party resolver, and the app bypasses the device's configured resolver (including VPN/custom/managed DNS). TLS to the DoH server is not DNSSEC validation. The resolver endpoint also needs a trusted bootstrap and normal TLS validation. Apple DNS Settings APIs configure user-enabled system-wide DNS and are not an app-local resolver API; DNS Proxy is a separate system extension architecture.
 
 **Decision:** candidate only; not approved as the default. Before implementation, explicitly decide whether the product accepts an external resolver and its privacy implications, choose the provider and bootstrap strategy, define dual-stack/CNAME completeness and failure semantics, and select a maintained DNS wire-format parser. See `docs/FEED_TRANSPORT_SPIKE.md` for the full evaluation and references.
+
+
+### System resolver candidate: separate AF_INET / AF_INET6 lookups — 2026-11-21
+
+Apple TN3151 recommends the system DNS resolver and `getaddrinfo` for BSD-socket applications. Apple's archived guidance warns that one dual-stack `getaddrinfo` call may cancel outstanding IPv6 work shortly after an IPv4 success. Two concurrent family-constrained calls (`AF_INET` and `AF_INET6`) may avoid that cross-family behavior and preserve system/VPN DNS routing better than app-managed DoH.
+
+This remains a candidate only. `getaddrinfo` is synchronous and cannot be actively interrupted by Swift task cancellation; a cancelled caller could avoid connecting after resolution returns, but the resolver work may continue. The two results are not an atomic DNS snapshot and do not prove authoritative completeness. Any candidate used for a connection must be validated as a numeric address and passed to the pinned transport, never re-resolved by hostname. The strict whole-answer-set rejection policy must not be weakened to selected-endpoint-only validation without an explicit ADR decision.
+
+**Next experiment:** prototype the resolver behind the existing injectable protocol in an isolated branch or test target, with bounded worker management and cancellation/no-connect guarantees. Test on supported iOS versions and real IPv4/IPv6/VPN/DNS failure scenarios before deciding whether its weaker cancellation semantics are acceptable.
+
+References:
+- Apple TN3151: https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
+- Apple archived hostname resolution guidance: https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/NetworkingTopics/Articles/ResolvingDNSHostnames.html
+- RFC 8305: https://www.rfc-editor.org/rfc/rfc8305
