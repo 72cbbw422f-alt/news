@@ -128,11 +128,17 @@ private struct AppleSystemFeedAddressResolverError: Error, LocalizedError {
 private final class ResolverContinuationState: @unchecked Sendable {
     private let lock = NSLock()
     private var continuation: CheckedContinuation<[String], Error>?
-    private(set) var isCancelled = false
+    private var cancelled = false
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
 
     func install(_ continuation: CheckedContinuation<[String], Error>) -> Bool {
         lock.lock()
-        if isCancelled {
+        if cancelled {
             lock.unlock()
             continuation.resume(throwing: CancellationError())
             return false
@@ -154,7 +160,7 @@ private final class ResolverContinuationState: @unchecked Sendable {
 
     func cancel() {
         lock.lock()
-        isCancelled = true
+        cancelled = true
         let continuation = self.continuation
         self.continuation = nil
         lock.unlock()
