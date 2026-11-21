@@ -79,6 +79,38 @@ final class FeedIPAddressTests: XCTestCase {
         }
     }
 
+    func testAnswerSetRejectsEmptyMalformedAndMixedPublicPrivateResults() {
+        XCTAssertThrowsError(try FeedIPAddressPolicy.validateAnswerSet([])) { error in
+            XCTAssertEqual(error as? FeedIPAddressPolicy.ValidationError, .emptyAnswerSet)
+        }
+
+        XCTAssertThrowsError(
+            try FeedIPAddressPolicy.validateAnswerSet(["8.8.8.8", "not-an-ip"])
+        ) { error in
+            XCTAssertEqual(
+                error as? FeedIPAddressPolicy.ValidationError,
+                .invalidAddress("not-an-ip")
+            )
+        }
+
+        XCTAssertThrowsError(
+            try FeedIPAddressPolicy.validateAnswerSet(["8.8.8.8", "10.0.0.1"])
+        ) { error in
+            XCTAssertEqual(
+                error as? FeedIPAddressPolicy.ValidationError,
+                .nonPublicAddress("10.0.0.1")
+            )
+        }
+    }
+
+    func testAnswerSetAcceptsOnlyWhenEveryAddressIsPublic() throws {
+        let addresses = try FeedIPAddressPolicy.validateAnswerSet([
+            "8.8.8.8",
+            "2001:4860:4860::8888"
+        ])
+        XCTAssertEqual(addresses.count, 2)
+    }
+
     private func tryUnwrap(
         _ literal: String,
         file: StaticString = #filePath,
