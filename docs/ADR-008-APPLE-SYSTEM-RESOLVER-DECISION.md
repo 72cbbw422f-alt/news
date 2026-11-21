@@ -71,16 +71,17 @@ The current branch's system-resolver and numeric-IP TLS prototype is not the sel
 
 ## Verification status
 
-The latest code CI run before this decision passed on commit `14e29598cff47639762286747ca67a357c90561a`:
-- NEWSFLOW Core Tests — Linux.
-- NEWSFLOW Core Tests — Apple Foundation.
-- NEWSFLOW iOS Simulator build and XCTest.
+Latest verified branch head before this documentation update: `29bbc3aee8dcfd1ec7e6a1ac6fd0ac5ea43c5e3e`. All six GitHub Actions check-runs passed, including the Xcode iOS Simulator build and XCTest job. The Xcode job reported 17 app tests with 0 failures; the hostname connection-factory suite contributed 5 tests with 0 failures.
 
-The documentation-only ADR clarification commit `ce53c7bf127e8410ba9a6a15c09132c69e57c25e` has its own CI runs in progress at the time of this decision.
+The verified implementation at that head is limited to:
+- The hostname-based `NWConnection` factory and TLS SNI configuration.
+- Connected-peer endpoint extraction and shared Core policy validation.
+- Factory/endpoint unit tests.
 
-No production connect-by-name peer-validation transport has been implemented or verified yet. Production FeedHTTPClient remains on URLSession and the DNS-rebinding/private-peer risk remains open until the new transport is complete.
+The connection lifecycle (`.ready` observation, timeout, cancellation and exactly-once completion), HTTP framing/request writing, bounded response parsing, redirect loop and production FeedHTTPClient integration are **not implemented**. Production FeedHTTPClient remains on URLSession, so DNS-rebinding/private-peer mitigation is not active in production.
 
-No signed IPA or physical-device verification is included.
+These CI results verify the code present at the stated head; they do not verify the full selected transport or real-device networking behavior. No signed IPA or physical-device verification is included.
+
 
 ## References
 
