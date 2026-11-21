@@ -1,83 +1,90 @@
-# ADR-008 — Apple system DNS and numeric destination pinning
+# ADR-008 — Feed transport and private-network destination policy
 
 **Decision date:** 2026-11-21  
-**Status:** Proposed — prototype only; production architecture is not approved  
+**Status:** Accepted — Apple-native connect-by-name with pre-HTTP peer validation  
 **Branch:** `security/feed-url-hardening`
 
-## Status clarification
+## Decision
 
-The current branch contains an isolated implementation prototype for Apple's configured system resolver and numeric-IP TLS connection preparation. Approval to prototype these components is **not** approval to replace the production feed transport.
+NEWSFLOW will use Network.framework connect-by-name for feed connections. The operating system remains responsible for DNS resolution, address selection, Happy Eyeballs behavior, VPN/network path integration, IPv6 and DNS64/NAT64 handling.
 
-The latest CI run for commit `14e29598cff47639762286747ca67a357c90561a` passed:
-- NEWSFLOW Core Tests — Linux.
-- NEWSFLOW Core Tests — Apple Foundation.
-- NEWSFLOW iOS Build — simulator build and XCTest.
+NEWSFLOW will inspect the established connection's actual remote endpoint and apply the shared `FeedIPAddressPolicy` **before sending any HTTP request bytes**. If the remote endpoint cannot be represented as a numeric IP address, or is private, local, reserved or otherwise non-public, the connection is cancelled and no HTTP request is sent.
 
-These results verify compilation and automated tests in the configured CI environments. They do not verify VPN On Demand, IPv6-only/DNS64/NAT64, network changes, resolver completeness, or real-device behavior.
+For HTTPS, TLS is established using the original URL hostname and normal system certificate trust/hostname verification. Only after TLS reaches ready and the actual remote endpoint passes policy may NEWSFLOW send the HTTP request. For plain HTTP, the remote endpoint must pass policy after TCP readiness and before the request is sent.
 
-## Candidate architecture under evaluation
-
-The prototype uses the Apple device's configured system DNS resolver for feed hostname resolution. It does not silently use a third-party DNS-over-HTTPS provider or override the user's configured DNS, VPN, managed DNS or split-DNS environment.
-
-The resolver adapter collects numeric IPv4 and IPv6 candidates. Every candidate returned by the resolver must pass the existing conservative `FeedIPAddressPolicy`. If the returned candidate set is empty, malformed, or contains any non-public/special-purpose address, the destination is rejected.
-
-The connection prototype connects only to a validated numeric IP endpoint. It does not pass the original hostname to a second resolver during connection establishment. For HTTPS, the original DNS hostname remains the TLS SNI and certificate identity, with normal system trust and hostname verification.
-
-This is an evaluated candidate, not a production commitment. The production `FeedHTTPClient` remains on `URLSession`.
+This is the selected production direction. It replaces the resolve-then-connect system-resolver prototype as the preferred architecture. The existing `AppleSystemFeedAddressResolver`, `PinnedFeedConnectionFactory` and numeric-IP TLS spike remain isolated experiments and must not be wired into the production path.
 
 ## Explicit security boundary
 
-Apple's system resolver does not provide NEWSFLOW with a documented guarantee that the returned results are the complete authoritative A+AAAA RRset. The prototype therefore validates **every numeric candidate returned by the system resolver**, but does not claim that it has inspected records the system resolver did not return.
+This decision does **not** claim strict pre-connect destination validation.
 
-This is weaker than the original strict full-RRset requirement. It is not equivalent to authoritative complete-answer validation. No production security claim may imply otherwise.
+Network.framework resolves and establishes the connection before NEWSFLOW can inspect the effective peer. For HTTPS, TLS handshake traffic may reach the selected endpoint before the application can reject it. The guarantee is narrower and precise:
 
-A cancelled lookup must never lead to a connection. The synchronous system resolver call itself cannot be interrupted once running; the async adapter cancels the awaiting caller promptly, discards late results, and Core orchestration checks cancellation again before returning any destination to the transport.
+- No HTTP request line, headers, cookies, credentials or feed request body are sent until the connected peer has passed destination policy.
+- A disallowed peer is disconnected immediately after the connection becomes inspectable.
+- TCP connection attempts and, for HTTPS, TLS handshake traffic may still reach a private or special-purpose endpoint before rejection.
+- This is a meaningful SSRF mitigation for HTTP application-layer access, but it is not equivalent to preventing all network contact with private destinations.
 
-## Platform and compatibility constraints
+The application must never silently fall back to URLSession or retry through a different unvalidated transport after peer validation fails.
 
-- Preserve the system resolver path so configured VPN, custom DNS and managed DNS policies are not silently bypassed.
-- Do not implement a quiet-period heuristic around DNS-SD callbacks.
-- Do not use deprecated CFHost as the production resolver.
-- Do not add a third-party DoH dependency or provider endpoint without an explicit architecture decision.
-- Keep IPv4 and IPv6 candidates; IPv6-only and DNS64/NAT64 behavior requires real-device/network verification.
-- Apple TN3151 warns that resolve-then-connect designs can affect VPN On Demand and require correct Happy Eyeballs behavior. A custom numeric-IP transport must account for those platform responsibilities; they cannot be assumed away by simulator tests.
-- No fallback to hostname-based URLSession is permitted after resolution, validation or pinned-connection failure if strict destination pinning remains the chosen security contract.
-- The alternative connect-by-name Network.framework APIs do not expose a documented pre-connect hook to validate every destination candidate. Inspecting the peer after readiness is too late to prevent connection/TLS traffic to a disallowed destination.
+## Why this choice
 
-## Decision gates before production implementation
+The strict numeric-pinning design requires a complete pre-connect DNS candidate set, then a connection to a selected numeric endpoint while preserving the original TLS identity. Apple's supported system APIs do not provide a reliable, cancellable complete A+AAAA answer-set boundary for this design. The synchronous `getaddrinfo` prototype cannot be interrupted and separate family queries are not an atomic authoritative RRset.
 
-The team must explicitly choose and document which security contract is required:
+Resolve-then-connect also transfers address racing, network changes and VPN On Demand compatibility responsibilities from the system to the application. Apple's TN3151 warns against this pattern for ordinary Apple-platform application networking.
 
-1. **Strict full RRset + cancellable resolution:** use a resolver/transport design that can establish a reliable answer-set completion boundary and inspect all relevant candidates before connecting. This may require a maintained DNS implementation and carries privacy, compatibility and operational costs.
-2. **System resolver + validate every returned candidate:** accept that the resolver may not expose the complete authoritative A+AAAA set and that resolve-then-connect introduces Apple platform compatibility responsibilities.
-3. **Connect-by-name + post-connect peer validation:** accept the weaker guarantee that TCP/TLS connection traffic may reach a disallowed endpoint before the app can inspect the peer. This is not equivalent to pre-connect SSRF prevention.
+A custom DNS-over-HTTPS resolver could provide explicit DNS records, but it would introduce a separate resolver trust/privacy choice and may bypass the user's configured DNS, VPN, managed DNS or split-DNS behavior. That is not justified for the initial RSS product.
 
-No option is selected for production by this ADR revision. The product/security owner must explicitly approve the threat-model trade-off before the transport is wired into production.
+Connect-by-name preserves Apple's network path and address selection behavior. Inspecting the actual connected peer before sending HTTP bytes provides a clear, testable application-layer security boundary without pretending to provide strict pre-connect blocking.
 
-## Prototype implementation sequence
+## Required implementation contract
 
-1. Keep the Apple system-resolver adapter and numeric-IP TLS factory isolated behind their current interfaces.
-2. Maintain deterministic tests for candidate validation, cancellation, TLS identity, peer endpoint and trust failures.
-3. Do not begin a production HTTP/1.1 transport until the decision gates above are resolved.
-4. If numeric pinning is approved, implement bounded HTTP framing, streaming body limits, redirects with per-hop resolution/validation/pinning, address racing and active connection cancellation.
-5. Test IPv4, IPv6, IPv6-only, DNS64/NAT64, VPN On Demand, DNS failures, cancellation and network changes on real Apple devices.
-6. Keep the current URLSession feed path until all selected transport acceptance gates pass.
+1. Validate URL syntax, scheme, credentials, port and hostname before opening a connection.
+2. Create a Network.framework connection using the original hostname, not a separately resolved numeric address.
+3. For HTTPS, use TLS with the original hostname as SNI and certificate identity, with normal system trust.
+4. Wait for the connection to become ready.
+5. Read the actual connected remote endpoint from the established connection. Require a numeric IPv4 or IPv6 address.
+6. Validate the peer with the shared `FeedIPAddressPolicy`.
+7. If endpoint inspection or validation fails, cancel the connection before sending any HTTP bytes.
+8. Only after successful peer validation, send the HTTP request with the original hostname in the Host header.
+9. Bound connection time, total request time, response headers, response body and redirects. Stream the response under a strict byte limit.
+10. On every redirect, close the previous connection and repeat URL validation, connect-by-name, peer inspection and policy validation for the new destination.
+11. Propagate task cancellation to the active Network.framework connection and release all continuations exactly once.
+12. Do not use URLSession as a fallback path.
 
-## Current verification and limitations
+## Required tests
 
-- Core resolver orchestration and conservative candidate-set validation have CI coverage.
-- The numeric-IP TLS factory and controlled TLS integration tests have passed iOS Simulator CI.
-- The Apple resolver adapter and `PinnedFeedConnectionFactory` compile and pass the current CI suite, including candidate preparation and mixed public/private rejection.
-- The latest CI run passed Linux Core tests, Apple Foundation Core tests, and the iOS Simulator build/XCTest job.
-- Production FeedHTTPClient remains on URLSession.
-- DNS rebinding/SSRF risk is not yet closed in production.
-- System resolver answer completeness and cancellability are not guaranteed.
-- VPN On Demand, Happy Eyeballs, IPv6-only, DNS64/NAT64 and network-change behavior are not verified on real devices.
-- No signed IPA or physical-device verification is included.
+- Public IPv4 and IPv6 peer endpoints are accepted.
+- Loopback, private, link-local, shared, multicast, unspecified, documentation and reserved/special-purpose endpoints are rejected.
+- No HTTP request bytes are written before the peer passes validation.
+- A private peer is disconnected after readiness and receives no HTTP request.
+- HTTPS uses the original hostname for SNI and certificate hostname verification.
+- Hostname mismatch and untrusted certificate chains fail.
+- Redirects revalidate the new connected peer; redirect to a private peer sends no HTTP request to that peer.
+- Redirect count, header size, response size, timeout and cancellation limits are enforced.
+- Cancellation closes the active connection and does not resume a continuation more than once.
+- IPv4, IPv6, IPv6-only, DNS64/NAT64, VPN On Demand and network changes are tested on real Apple devices before release.
+
+## Prototype disposition
+
+The current branch's system-resolver and numeric-IP TLS prototype is not the selected production path. Keep it isolated until the connect-by-name peer-validation transport is implemented and tested. Do not delete it in this change; it remains useful as a comparison experiment.
+
+## Verification status
+
+The latest code CI run before this decision passed on commit `14e29598cff47639762286747ca67a357c90561a`:
+- NEWSFLOW Core Tests — Linux.
+- NEWSFLOW Core Tests — Apple Foundation.
+- NEWSFLOW iOS Simulator build and XCTest.
+
+The documentation-only ADR clarification commit `ce53c7bf127e8410ba9a6a15c09132c69e57c25e` has its own CI runs in progress at the time of this decision.
+
+No production connect-by-name peer-validation transport has been implemented or verified yet. Production FeedHTTPClient remains on URLSession and the DNS-rebinding/private-peer risk remains open until the new transport is complete.
+
+No signed IPA or physical-device verification is included.
 
 ## References
 
 - Apple TN3151 — Choosing the right networking API: https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
-- Apple archived Resolving DNS Hostnames guidance: https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/NetworkingTopics/Articles/ResolvingDNSHostnames.html
-- Apple Supporting IPv6: https://developer.apple.com/support/ipv6
+- Apple Network framework: https://developer.apple.com/documentation/network
+- Apple NWConnection state: https://developer.apple.com/documentation/network/nwconnection/state-swift.enum
 - RFC 8305 — Happy Eyeballs Version 2: https://www.rfc-editor.org/rfc/rfc8305
