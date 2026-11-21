@@ -26,13 +26,16 @@ public enum FeedURLSafety {
         // and DNS/address pinning can be implemented consistently on all platforms.
         guard !host.contains(":") else { return false }
 
-        if let octets = ipv4Octets(host) {
-            return isPublicIPv4(octets)
+        // Use the same IP classifier as the resolver/pinning policy. Keeping
+        // literal-host checks in sync prevents a destination accepted here from
+        // being rejected (or inconsistently classified) later in the pipeline.
+        if let address = FeedIPAddress(host) {
+            return address.isPublicUnicast
         }
 
         // Reject numeric-only and legacy integer/octal/hex IPv4 representations.
-        // URL parsers may interpret a 0x-prefixed host as an IPv4 address even
-        // though it is not a conventional dotted-decimal literal.
+        // URL parsers may interpret these as IPv4 destinations even though they
+        // are not conventional dotted-decimal literals.
         guard !host.split(separator: ".", omittingEmptySubsequences: false)
             .contains(where: { $0.hasPrefix("0x") }),
               host.rangeOfCharacter(from: CharacterSet.letters) != nil
@@ -61,40 +64,6 @@ public enum FeedURLSafety {
             return false
         }
 
-        return true
-    }
-
-    private static func ipv4Octets(_ host: String) -> [Int]? {
-        let parts = host.split(separator: ".", omittingEmptySubsequences: false)
-        guard parts.count == 4 else { return nil }
-        var values: [Int] = []
-        for part in parts {
-            guard !part.isEmpty,
-                  part.allSatisfy({ $0.isNumber }),
-                  let value = Int(part),
-                  (0...255).contains(value),
-                  String(value) == part else { return nil }
-            values.append(value)
-        }
-        return values
-    }
-
-    private static func isPublicIPv4(_ ip: [Int]) -> Bool {
-        let a = ip[0], b = ip[1], c = ip[2]
-
-        // IANA special-purpose, private, loopback, link-local, shared, multicast
-        // and reserved ranges are not valid public feed destinations.
-        if a == 0 || a == 10 || a == 127 || a >= 224 { return false }
-        if a == 100 && (64...127).contains(b) { return false }
-        if a == 169 && b == 254 { return false }
-        if a == 172 && (16...31).contains(b) { return false }
-        if a == 192 && b == 168 { return false }
-        if a == 192 && b == 0 && c == 0 { return false }
-        if a == 192 && b == 0 && c == 2 { return false }
-        if a == 192 && b == 88 && c == 99 { return false }
-        if a == 198 && (b == 18 || b == 19) { return false }
-        if a == 198 && b == 51 && c == 100 { return false }
-        if a == 203 && b == 0 && c == 113 { return false }
         return true
     }
 }
