@@ -313,3 +313,24 @@ References:
 - Apple DNS Settings: https://developer.apple.com/documentation/networkextension/dns-settings
 - Apple DNS Proxy provider: https://developer.apple.com/documentation/networkextension/dns-proxy-provider
 - Cloudflare DNS wire format documentation (protocol example only, not a provider recommendation): https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/make-api-requests/dns-wireformat/
+
+
+## System resolver with per-family getaddrinfo — follow-up evaluation — 2026-11-21
+
+Apple's current TN3151 recommends using the system DNS resolver and specifically recommends `getaddrinfo` for BSD-socket applications. Apple's archived hostname-resolution guidance documents an important behavior: a single `getaddrinfo` call can cancel outstanding IPv6 lookup work shortly after receiving a successful IPv4 result. This is why one unconstrained dual-stack call cannot be treated as proof of a complete A+AAAA result set.
+
+A candidate worth a narrowly scoped experiment is two concurrent, family-constrained system resolver calls (`AF_INET` and `AF_INET6`) on dedicated background workers. Each result list would be converted to numeric addresses, validated, and only those numeric addresses would be passed to the pinned connection factory. This preserves the operating system's configured resolver path more closely than application-managed DoH and avoids a second hostname lookup at the feed connection.
+
+Important limitations remain:
+- `getaddrinfo` is synchronous. Swift task cancellation cannot interrupt an already-running call. A cancelled caller can be prevented from connecting after the call returns, but the resolver work itself may continue in the background.
+- Separate family calls are not an atomic DNS snapshot and do not prove authoritative RRset completeness. They only produce the candidates returned by the system resolver at that time.
+- The experiment must verify behavior on supported iOS versions and real network configurations, including VPN/split DNS, IPv4-only, IPv6-only, NXDOMAIN/NODATA, slow or non-responsive family, multiple addresses, and cancellation.
+- No hostname may be passed onward to the feed transport. Every candidate that might be used must be parsed and validated as a numeric IP, and the selected peer must be verified against that exact address.
+- If any candidate is malformed or non-public, the current strict whole-set policy rejects the destination. Relaxing that policy to validate only the actual numeric endpoint selected for connection is an architecture change and requires an ADR decision; it must not happen implicitly.
+
+**Assessment:** this is the best next system-DNS experiment because it follows Apple's recommended resolver API and may avoid cross-family early cancellation by separating the calls. It does not satisfy the current active-resolver-cancellation contract, so it is not yet an implementation decision. Do not weaken the contract or ship this adapter without tests and an explicit decision.
+
+References:
+- Apple TN3151 — Choosing the right networking API: https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
+- Apple archived hostname resolution guidance (including getaddrinfo IPv6 cancellation behavior): https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/NetworkingTopics/Articles/ResolvingDNSHostnames.html
+- RFC 8305 — Happy Eyeballs v2: https://www.rfc-editor.org/rfc/rfc8305
