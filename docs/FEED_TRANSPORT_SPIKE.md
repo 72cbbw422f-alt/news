@@ -1,7 +1,7 @@
 # Feed transport hardening — implementation spike
 
 **Date:** 2026-11-20  
-**Status:** TLS integration harness verified; IP address policy implemented, CI verification pending (2026-11-21)  
+**Status:** TLS integration harness and IP address policy verified in CI; DNS resolver/orchestration not implemented (2026-11-21)  
 **Branch:** security/feed-url-hardening
 
 ## Problem
@@ -40,11 +40,11 @@ The test fixture uses a dedicated test-only CA and PKCS#12 server identity. The 
 
 The SNI assertion is made on the successful handshake. A hostname-mismatch handshake is expected to abort before the server reaches ready state, so it is not used as the SNI observation case.
 
-The iOS workflow runs the simulator build and unit-test scheme on an available iPhone Simulator. The new integration tests are not considered verified until that CI run passes.
+The iOS workflow runs the simulator build and unit-test scheme on an available iPhone Simulator. The loopback TLS integration suite is verified in CI (8 iOS tests total, 0 failures on the current branch head).
 
-## Required next proof: controlled TLS server
+## Verified proof: controlled TLS server
 
-Before expanding into DNS or HTTP, add a controlled TLS server/client integration fixture. The proof must establish all of the following:
+The controlled TLS server/client integration fixture is implemented and has passed on iOS Simulator. It establishes the following:
 
 1. The client connects to the selected numeric IPv4/IPv6 endpoint without a second hostname lookup.
 2. The server observes the expected peer address.
@@ -56,7 +56,7 @@ Before expanding into DNS or HTTP, add a controlled TLS server/client integratio
 
 The certificate strategy must preserve normal trust evaluation. Do not make a test pass by adding a trust-all callback or disabling hostname verification. If a private test CA is used, isolate its trust configuration to the test environment and retain normal chain and hostname checks.
 
-A local `NWListener` fixture is a candidate for the controlled server, but its TLS identity setup and trust-store isolation must be proven before treating it as an acceptance test.
+The local `NWListener` fixture uses a test-only CA and identity. Trust evaluation and hostname policy remain enabled; the production factory has no test trust callback.
 
 ## Candidate transport direction
 
@@ -109,7 +109,7 @@ Do not replace FeedHTTPClient or remove the existing URLSession implementation u
 
 ## Next implementation step
 
-Run and review CI for the new loopback TLS integration tests. If they pass, extend the proof to IPv6 and cancellation/timeout edge cases, then begin the resolver and complete A/AAAA address policy. Keep the production feed transport unchanged until DNS, TLS and bounded HTTP behavior are all covered.
+The next implementation step is a cross-platform, injectable DNS resolver contract and fail-closed orchestration in NEWSFLOWCore. It must validate the complete A/AAAA answer set through `FeedIPAddressPolicy` before returning any connectable endpoint, propagate cancellation, and have deterministic fake-resolver tests. Then add an Apple-platform resolver adapter and prove that the selected numeric IP is used by the TLS connection factory. Keep the production feed transport unchanged until DNS, TLS, redirects, bounded HTTP framing, timeout and cancellation acceptance tests are all covered.
 
 
 ## Certificate fixture diagnosis and correction — 2026-11-20
@@ -126,7 +126,7 @@ Fixture files updated:
 - `NEWSFLOWAppTests/Fixtures/ca.pem`
 - `NEWSFLOWAppTests/Fixtures/server.p12.base64`
 
-The simulator CI result for the renewed fixture is pending. Do not claim the TLS proof is successful until the iOS integration suite passes.
+The renewed fixture was subsequently verified by the passing iOS Simulator integration suite documented below.
 
 ## CI result — 2026-11-20 (commit `3d5b3572070b8fb9be561c8e92d4887fa9b814f0`)
 
@@ -160,3 +160,16 @@ Added `NEWSFLOWCore/Sources/NEWSFLOWCore/FeedIPAddress.swift`:
 Added `NEWSFLOWCore/Tests/NEWSFLOWCoreTests/FeedIPAddressTests.swift` to cover accepted public IPv4/IPv6 addresses, special-purpose ranges, malformed literals and mixed public/private answer sets.
 
 This is address-policy groundwork only. No DNS resolver, DNS cancellation, numeric-IP connection orchestration, redirect re-resolution or production transport integration has been implemented. The new policy must pass Linux and Apple Foundation CI before it is considered verified.
+
+
+## Verified IP policy CI milestone — 2026-11-21 (commit `62c827decd994063cf9cfe49c56998caef5fd07a`)
+
+The current branch head passed all relevant CI jobs:
+- iOS Simulator build and XCTest: 8 tests, 0 failures. This includes 5 pinned TLS factory tests and 3 loopback TLS integration tests.
+- NEWSFLOWCore on Linux: 33 tests, 0 failures.
+- NEWSFLOWCore with Apple Foundation: 35 tests, 0 failures.
+- The six new `FeedIPAddressTests` passed on both Core platforms.
+
+The policy implementation is now CI-verified, but it remains a policy primitive rather than a resolver. No DNS query, cancellation-aware resolution, endpoint orchestration, redirect re-resolution or production transport integration exists yet. The IPv4/IPv6 classification remains intentionally conservative and must be reviewed against the current IANA special-purpose registries before production use; it should not be described as a complete registry-derived policy.
+
+Current verified head: `62c827decd994063cf9cfe49c56998caef5fd07a`. PR #2 remains open and Draft; no merge and no IPA build have occurred.
