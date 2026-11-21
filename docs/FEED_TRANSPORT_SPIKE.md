@@ -273,3 +273,43 @@ References:
 - RFC 8484 — DNS Queries over HTTPS: https://www.rfc-editor.org/rfc/rfc8484
 - Apple NetworkExtension DNS Settings: https://developer.apple.com/documentation/networkextension/dns-settings
 - Apple NEDNSOverHTTPSSettings: https://developer.apple.com/documentation/networkextension/nednsoverhttpssettings
+
+
+## DNS-over-HTTPS resolver candidate — 2026-11-21
+
+DNS-over-HTTPS (DoH, RFC 8484) is a viable *protocol-level* candidate for obtaining bounded DNS responses, but it changes the trust and privacy model and does not by itself solve the entire resolver contract.
+
+### What it improves
+
+- RFC 8484 maps each DNS query/response pair to one HTTPS exchange. With the wire format (`application/dns-message`), the client receives a DNS message with explicit message boundaries rather than an open-ended callback stream.
+- The client can issue explicit A and AAAA queries and parse each response independently. It can reject truncated, malformed, mismatched-question, non-success RCODE, or incomplete CNAME-chain responses.
+- The DNS message can be parsed and validated before any feed-host connection is attempted. The validated numeric address is then passed to the existing pinned TLS connection factory.
+- An HTTP request task can be cancelled; the implementation must propagate Swift task cancellation to the underlying request and must not accept a late response after cancellation.
+
+### Important limitations and design requirements
+
+- A and AAAA are separate DNS questions. Even when issued concurrently, they are not an atomic snapshot; records and TTLs can differ between responses. The resolver adapter must define a bounded policy for combining both responses and fail closed if either query fails or is incomplete. It must not quietly treat one successful family as the complete answer set.
+- CNAME chains must be handled deliberately. A response's Answer section can contain aliases and terminal records, but the parser must validate owner names, types, classes, bounds, compression pointers and chain termination. If additional lookups are needed, they must remain within the same resolver policy and cancellation/timeout budget.
+- HTTP 2xx does not imply DNS success. RFC 8484 permits DNS error RCODEs inside successful HTTP responses; inspect the DNS header and question, not just the HTTP status.
+- HTTPS protects the client-to-resolver channel; it does not itself provide DNSSEC validation. DNSSEC validation is independent. The design must explicitly choose between trusting a resolver's validation indication (and its AD-bit semantics) or implementing DNSSEC validation locally. Do not claim DNSSEC merely because DoH uses TLS.
+- DoH sends feed hostnames to the selected resolver. This is a third-party disclosure and creates provider availability, filtering, logging/retention, jurisdiction and censorship dependencies. It bypasses the device's configured system resolver, including VPN, parental-control, enterprise and custom-DNS behavior. No public provider should be selected as a silent default.
+- The DoH endpoint itself needs a trusted bootstrap path. A fixed, application-controlled HTTPS endpoint with normal system TLS trust is materially different from arbitrary user-supplied resolver URLs, but its hostname still has to be resolved to establish the resolver connection. This bootstrap is not the feed destination and must not be confused with feed-host pinning. Do not disable certificate validation or follow endpoint redirects to arbitrary hosts.
+- Use strict response-size, redirect, timeout and content-type limits. Disable automatic redirects or validate every redirect under a separately specified resolver-endpoint policy. Avoid cache behavior that can outlive DNS TTLs; account for both HTTP cache headers and DNS TTLs.
+- A maintained DNS wire-format parser is required. Apple's current TN3151 says to use `dns.h`/`dns_util.h` for raw DNS queries outside the system resolver, while noting `dns_util.h` is deprecated and has no direct replacement; packet parsing therefore needs a separately evaluated maintained dependency or carefully scoped implementation.
+
+### Apple platform distinction
+
+Apple's NetworkExtension DNS Settings APIs configure a system-wide encrypted DNS resolver and require the user to enable the configuration. They are not an app-local DNS lookup API for a feed transport. A DNS Proxy provider is a system-wide proxy extension with additional capability and deployment implications, not a lightweight resolver adapter for this feature. These APIs are therefore not selected for the current feed transport spike.
+
+### Current assessment
+
+DoH has a real advantage over DNS-SD here: each HTTP exchange gives a bounded DNS wire message, making response completion observable. It is the strongest candidate evaluated so far for an app-owned resolver adapter. However, it is **not approved for implementation as the default** until the project explicitly accepts the external resolver/privacy tradeoff, selects the provider/bootstrap strategy, settles A+AAAA/CNAME completeness semantics, and selects a maintained parser with tests.
+
+No production code or feed transport was changed as part of this evaluation.
+
+References:
+- RFC 8484, DNS Queries over HTTPS: https://www.rfc-editor.org/rfc/rfc8484.html
+- Apple TN3151, Choosing the right networking API: https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
+- Apple DNS Settings: https://developer.apple.com/documentation/networkextension/dns-settings
+- Apple DNS Proxy provider: https://developer.apple.com/documentation/networkextension/dns-proxy-provider
+- Cloudflare DNS wire format documentation (protocol example only, not a provider recommendation): https://developers.cloudflare.com/1.1.1.1/encryption/dns-over-https/make-api-requests/dns-wireformat/
