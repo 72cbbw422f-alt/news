@@ -156,7 +156,7 @@ final class FeedHTTPClientTests: XCTestCase {
             "http://[::ffff:127.0.0.1]/feed.xml"
         ]
         for value in blocked {
-            XCTAssertFalse(FeedSource.validatedHTTPURL(URL(string: value)!), "Expected to block \\(value)")
+            XCTAssertFalse(FeedSource.validatedHTTPURL(URL(string: value)!), "Expected to block \(value)")
         }
     }
 
@@ -180,7 +180,7 @@ final class FeedHTTPClientTests: XCTestCase {
             "ftp://feeds.example.org/feed.xml"
         ]
         for value in blocked {
-            XCTAssertFalse(FeedSource.validatedHTTPURL(URL(string: value)!), "Expected to block \\(value)")
+            XCTAssertFalse(FeedSource.validatedHTTPURL(URL(string: value)!), "Expected to block \(value)")
         }
     }
 
@@ -222,7 +222,7 @@ final class FeedHTTPClientTests: XCTestCase {
         } catch is CancellationError {
             // Expected: caller cancellation reaches the download continuation.
         } catch {
-            XCTFail("Unexpected error: \\(error)")
+            XCTFail("Unexpected error: \(error)")
         }
 
         await fulfillment(of: [stopped], timeout: 2)
@@ -254,7 +254,7 @@ final class FeedHTTPClientTests: XCTestCase {
         } catch let error as FeedHTTPError {
             XCTAssertEqual(error, .tooManyRedirects)
         } catch {
-            XCTFail("Unexpected error: \\(error)")
+            XCTFail("Unexpected error: \(error)")
         }
     }
     #endif
