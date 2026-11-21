@@ -355,3 +355,23 @@ References:
 - Darwin implementation: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Sources/AsyncDNSResolver/dnssd/DNSResolver_dnssd.swift
 - c-ares implementation: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Sources/AsyncDNSResolver/c-ares/DNSResolver_c-ares.swift
 - Per-query cancellation tests: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Tests/AsyncDNSResolverTests/c-ares/CAresCancellationTests.swift
+
+
+## Follow-up: upstream c-ares backend readiness risk — 2026-11-21
+
+The Apple `swift-async-dns-resolver` repository's latest release remains 0.8.1 (2026-10-30). A current upstream pull request, [#93 — Only report sockets to c-ares when the OS says they are ready](https://github.com/apple/swift-async-dns-resolver/pull/93), is still open.
+
+The proposed fix describes a Darwin TCP readiness defect in the package's c-ares `QueryProcessor`: the current polling loop forwards sockets that c-ares is interested in to `ares_process_fd` every 10 ms without first checking OS-level readiness. On macOS, a TCP connection still in SYN_SENT can consequently be treated as connected; a send then fails with ENOTCONN and is surfaced as a spurious connection-refused error. The report says this can affect forced TCP queries and the TCP fallback after truncated UDP responses. The PR includes readiness polling and additional tests, but it is not part of the latest 0.8.1 release and must not be assumed available in a pinned dependency.
+
+This is an additional adoption risk beyond the already documented cancellation and DNS-SD completion limitations:
+- The default Darwin backend still does not establish a complete A/AAAA answer boundary.
+- The c-ares backend promptly cancels the Swift caller but intentionally leaves the underlying query running until callback/timeout.
+- The current released c-ares polling implementation has an unresolved reported TCP readiness issue on macOS.
+- The upstream readiness fix has not yet been merged/released as of this review.
+
+**Assessment:** do not add `swift-async-dns-resolver` 0.8.1 to NEWSFLOW at this stage. Re-evaluate only after the upstream readiness fix is merged and released, then run the package's own tests and NEWSFLOW integration tests on the exact iOS Simulator/Xcode toolchain. Even after that, cancellation semantics and complete-answer/CNAME handling remain separate acceptance gates.
+
+References:
+- Latest release: https://github.com/apple/swift-async-dns-resolver/releases/latest
+- Upstream PR #93: https://github.com/apple/swift-async-dns-resolver/pull/93
+- c-ares backend implementation at 0.8.1: https://github.com/apple/swift-async-dns-resolver/blob/0.8.1/Sources/AsyncDNSResolver/c-ares/DNSResolver_c-ares.swift
