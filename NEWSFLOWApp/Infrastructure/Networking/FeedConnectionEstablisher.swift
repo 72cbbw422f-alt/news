@@ -12,6 +12,9 @@ enum FeedConnectionState: Equatable {
 
 /// Small seam around Network.framework so the lifecycle coordinator can be
 /// tested with deterministic state transitions without opening real sockets.
+///
+/// Implementations must deliver state callbacks asynchronously on the supplied
+/// queue; start(on:) must never invoke stateHandler inline.
 protocol FeedConnectionControlling: AnyObject {
     var stateHandler: ((FeedConnectionState) -> Void)? { get set }
     var connection: NWConnection? { get }
@@ -138,8 +141,11 @@ private final class FeedConnectionAttempt: @unchecked Sendable {
                     return
                 }
                 queue.asyncAfter(deadline: .now() + timeout, execute: timeoutWork)
-                controller.start(on: queue)
                 lock.unlock()
+
+                // Never call an injected controller while holding the attempt
+                // lock: a synchronous callback would otherwise deadlock.
+                controller.start(on: queue)
             }
         } onCancel: {
             cancel()
