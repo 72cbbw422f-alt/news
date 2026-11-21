@@ -138,6 +138,29 @@ References:
 - Apple TN3151 networking guidance: https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
 - Apple archived hostname resolution guidance: https://developer.apple.com/library/archive/documentation/NetworkingInternet/Conceptual/NetworkingTopics/Articles/ResolvingDNSHostnames.html
 
+## Network.framework connected-peer validation candidate — 2026-11-21
+
+A second candidate was evaluated to avoid depending on a standalone DNS API: create an `NWConnection` using the hostname, wait for readiness, inspect the connected path's remote endpoint, reject non-public destinations, and only then send the HTTP request.
+
+This is attractive because the request would use the same established connection whose peer was inspected. It also naturally avoids a second DNS lookup between validation and the HTTP request, provided the implementation never reconnects or retries using the hostname without repeating the check.
+
+However, it does **not** satisfy the current strict requirement to reject private destinations before connecting:
+
+- For a connection configured with TCP and TLS, Network.framework's ready state is reached after the TLS handshake completes. The TLS ClientHello and server handshake therefore occur before the application can inspect the ready connection's path.
+- A TCP-only connection could be inspected at TCP readiness before sending HTTP bytes, but the public Network.framework API does not provide a documented way to upgrade that already-established `NWConnection` in place by adding `NWProtocolTLS` afterward.
+- Using BSD sockets to establish TCP, inspect `getpeername`, and then add TLS through Secure Transport is not an acceptable workaround: Apple marks Secure Transport deprecated, states that it is legacy, and explicitly recommends Network.framework instead. Apple also notes Secure Transport does not support TLS 1.3.
+
+The approach could potentially enforce a narrower policy — no HTTP request bytes are sent until the connected peer is checked — but it would still initiate TCP and, for HTTPS, TLS handshakes to a private/special-purpose address. That is a weaker guarantee than the current fail-closed design and must not be adopted silently.
+
+**Decision:** retain this as a documented fallback candidate only. Do not replace the resolver contract, do not change the security acceptance criteria, and do not wire hostname-based `NWConnection` into the feed client until a deliberate architecture decision approves the weaker pre-application-data guarantee and tests prove the actual remote endpoint semantics for hostname endpoints.
+
+References:
+- Apple `NWConnection.State.ready`: https://developer.apple.com/documentation/network/nwconnection/state-swift.enum/ready
+- Apple TN3151 (ready-state/TLS and networking API guidance): https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
+- Apple `NWPath.remoteEndpoint`: https://developer.apple.com/documentation/network/nwpath/remoteendpoint
+- Apple Secure Transport deprecation: https://developer.apple.com/documentation/security/secure-transport
+- WWDC18 Network.framework session (ready state includes completed TLS handshake): https://developer.apple.com/videos/play/wwdc2018/715/
+
 ## Verified resolver orchestration and cancellation — 2026-11-21
 
 Commit `6acb11359342139ed1bd6d17cc403c5f911fad12` adds `testPropagatesCancellationWhileResolverIsSuspended` to `NEWSFLOWCore/Tests/NEWSFLOWCoreTests/FeedAddressResolutionTests.swift`. The test waits until the fake resolver has actually started, cancels the in-flight task, and verifies that cancellation reaches the awaiting caller as `CancellationError`.
