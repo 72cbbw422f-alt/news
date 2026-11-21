@@ -149,6 +149,11 @@ final class FeedHTTPClientTests: XCTestCase {
             "http://localhost/feed.xml",
             "http://printer.local/feed.xml",
             "http://router.internal/feed.xml",
+            "http://intranet/feed.xml",
+            "http://printer/feed.xml",
+            "http://.example.org/feed.xml",
+            "http://feeds..example.org/feed.xml",
+            "http://feeds.example.org./feed.xml",
             "file:///etc/passwd",
             "ftp://feeds.example.org/feed.xml"
         ]
