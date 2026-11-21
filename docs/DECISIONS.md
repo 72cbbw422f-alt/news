@@ -28,20 +28,16 @@ YouTube, Bluesky and Reddit remain separate adapters. Their availability, rate l
 **Status:** Accepted  
 Only report compilation, tests, IPA creation or device verification when the corresponding operation was actually performed in a compatible environment.
 
-## ADR-008 — DNS resolution and destination pinning for feed transport
-**Status:** Proposed — implementation spike in progress
+## ADR-008 — Feed transport and private-network destination policy
+**Status:** Accepted — Network.framework connect-by-name with connected-peer validation before HTTP request bytes
 
-The current URL validator is a conservative URL-shape filter only. It does not resolve hostnames or control which address the HTTP stack ultimately connects to. DNS rebinding and hostnames resolving to private or special-purpose addresses therefore remain an SSRF gap.
+NEWSFLOW will connect using the original hostname through Network.framework, preserving system DNS, address selection, Happy Eyeballs, VPN/network path, IPv6 and DNS64/NAT64 behavior. Once the connection is inspectable, the actual numeric remote peer must pass the shared `FeedIPAddressPolicy` before any HTTP request bytes are sent. HTTPS uses the original hostname for SNI and normal system certificate/hostname verification.
 
-A future hardened transport must own both resolution and connection establishment. The implementation must not perform a standalone DNS lookup and then hand the original hostname to an ordinary URLSession, because that permits a second resolution during connection setup.
+**Security boundary:** this is not strict pre-connect blocking. TCP and, for HTTPS, TLS handshake traffic may reach a private/special-purpose endpoint before peer inspection. The guarantee is that no HTTP request line, headers, credentials, cookies or body are sent to a peer that fails policy. Never fall back to URLSession after validation failure.
 
-Required design properties:
-- Resolve each hostname immediately before connecting and validate every returned A/AAAA address against the IANA special-purpose ranges. Reject the destination if the answer set contains any non-public address; do not let connection racing select an unchecked address.
-- Connect to one of the validated numeric addresses directly, without resolving the hostname again.
-- For HTTPS, preserve the original hostname for TLS SNI and certificate hostname verification while pinning the socket destination to the selected validated IP.
-- Re-run the complete resolution and validation pipeline for every redirect destination. Retain the existing redirect count, response-size and timeout limits.
-- Keep the transport behind a small injectable protocol so NEWSFLOWCore tests can use deterministic resolver and connection fakes. The app/platform adapter may use Network.framework or another transport that can demonstrably satisfy the TLS and address-pinning requirements.
-- Do not silently fall back to ordinary URLSession for a hostname when pinning is unavailable. Fail closed.
+Every redirect must close the previous connection and repeat URL validation, connect-by-name and peer validation. Connection lifecycle, timeouts, bounded HTTP framing/streaming, redirect handling and cancellation must be implemented and tested before production integration. See `docs/ADR-008-APPLE-SYSTEM-RESOLVER-DECISION.md` for the authoritative contract.
+
+The following spike notes retain the historical investigation of strict DNS answer-set pinning, system resolver and DoH candidates. Their earlier recommendations and statements that ADR-008 is Proposed are superseded by the accepted decision above. They remain useful as design history, not as current implementation requirements.
 
 ### Implementation spike findings (2026-11-21)
 
@@ -59,7 +55,7 @@ The next decision gate is to identify a supported Apple resolver approach that c
 
 See `docs/FEED_TRANSPORT_SPIKE.md` for the API evaluation, implementation inventory, verification boundary, TLS test-harness requirements and remaining acceptance criteria.
 
-ADR-008 remains proposed. Do not claim complete SSRF protection, replace the current feed transport or merge the hardening branch until the controlled TLS proof, DNS answer-set policy, redirect re-resolution, HTTP framing/bounded streaming, timeout and cancellation tests have passed.
+Historical note: this proposal predates the accepted ADR-008 decision recorded above. Its strict complete-A+AAAA answer-set requirement is superseded by connected-peer validation before HTTP request bytes. The current selected transport is not yet implemented in production; do not claim complete SSRF protection or merge until the accepted ADR-008 implementation and acceptance tests pass.
 
 
 ### DNS-over-HTTPS candidate evaluation — 2026-11-21
