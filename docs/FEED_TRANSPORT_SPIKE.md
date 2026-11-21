@@ -513,7 +513,7 @@ The review also found that the URL validator previously accepted either port 80 
 
 This aligns literal URL validation with the existing conservative IP policy; it does not resolve hostnames, close DNS rebinding, or complete the production SSRF mitigation.
 
-A separate lifecycle item remains for the next review: `FeedHTTPClient` currently bridges URLSession completion through a checked continuation. Cancellation propagation from the calling Swift task to the active URLSession task must be audited and tested before the custom transport's cancellation acceptance criteria can be considered complete.
+Caller-task cancellation is now propagated by `FeedHTTPClient` through a cancellation handler to the active `URLSessionDataTask`. Continuation/session/task state is protected by a lock so delegate completion and cancellation resume the caller at most once. An Apple-platform regression test holds a custom `URLProtocol` request open, cancels the fetch task after loading starts, and verifies both `CancellationError` and `stopLoading`. This test is awaiting CI on the branch head; it verifies the current URLSession adapter's cancellation behavior, not cancellation of a future DNS resolver or pinned Network.framework connection.
 
 Files changed:
 - `NEWSFLOWCore/Sources/NEWSFLOWCore/FeedURLSafety.swift`
