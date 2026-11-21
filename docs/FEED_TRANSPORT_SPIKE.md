@@ -107,7 +107,7 @@ Do not replace FeedHTTPClient or remove the existing URLSession implementation u
 - Apple: Creating an Identity for Local Network TLS — https://developer.apple.com/documentation/network/creating-an-identity-for-local-network-tls
 - Apple: Choosing the right networking API (TN3151) — https://developer.apple.com/documentation/technotes/tn3151-choosing-the-right-networking-api
 
-## Current implementation step — Apple system resolver
+## Current implementation step — Apple system resolver and pinned TLS preparation
 
 ADR-008 now selects Apple's configured system resolver. NEWSFLOW will not silently use a third-party DoH provider or bypass the device's VPN, managed DNS or custom DNS configuration.
 
@@ -115,7 +115,7 @@ ADR-008 now selects Apple's configured system resolver. NEWSFLOW will not silent
 
 `FeedAddressResolutionService` checks cancellation before and after resolution and validates every returned candidate through `FeedIPAddressPolicy`. The connection layer must check cancellation before connecting and use only a validated numeric endpoint. It must never re-resolve the original hostname.
 
-The adapter and updated Core contract are awaiting CI verification. Production FeedHTTPClient remains unchanged until the resolver, pinned TLS, HTTP framing, redirects, timeouts, cancellation and Apple network-compatibility acceptance tests pass.
+The adapter is now connected to the TLS factory through `PinnedFeedConnectionFactory`. It validates HTTPS URL shape, resolves through the Apple system resolver, validates every returned numeric candidate in Core, and prepares one numeric-IP TLS connection per accepted candidate. It deliberately does not start connections. Tests cover dual-stack candidate preparation, mixed public/private rejection, HTTP rejection and embedded credentials. Canonical numeric IP serialization has a Core round-trip test. These additions are awaiting CI verification. Production FeedHTTPClient remains unchanged until the resolver, pinned TLS, HTTP framing, redirects, timeouts, cancellation and Apple network-compatibility acceptance tests pass.
 
 ## Apple resolver API evaluation — 2026-11-21
 
